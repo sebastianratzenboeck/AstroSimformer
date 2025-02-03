@@ -1,0 +1,15 @@
+numpy
+matplotlib
+jax
+torch
+torchaudio
+torchvision
+hydra-core
+hydra-submitit-launcher
+hydra-optuna-sweeper
+omegaconf
+sbi==0.22.0
+optuna
+tueplots
+seaborn
+pandas
