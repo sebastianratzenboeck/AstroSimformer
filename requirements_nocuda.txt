@@ -1,3 +1,5 @@
+# Requires Python 3.10
+
 jupyter
 pot
 seaborn
@@ -10,12 +12,10 @@ numpy==1.26.3
 scipy==1.11.4
 matplotlib
 dm-haiku<=0.0.11
-optax
+optax==0.2.0
 ott-jax
 networkx
 IPython
-torchaudio
-torchvision
 hydra-core
 hydra-submitit-launcher
 hydra-optuna-sweeper

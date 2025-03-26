@@ -1,18 +1,13 @@
-
-
 try:
     from sbi.analysis import pairplot
 except:
     pass
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
-
 
 import numpy as np
 import jax
 import jax.numpy as jnp
-
 
 import os
 import pkg_resources

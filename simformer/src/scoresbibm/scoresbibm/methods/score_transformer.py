@@ -1,8 +1,6 @@
 import jax
 import jax.numpy as jnp
-
 import optax
-
 from functools import partial
 from probjax.nn.loss_fn import denoising_score_matching_loss
 from scoresbibm.methods.sde import init_sde_related
@@ -11,6 +9,7 @@ from scoresbibm.methods.neural_nets import scalar_transformer_model
 from scoresbibm.tasks.base_task import base_batch_sampler
 from scoresbibm.utils.condition_masks import get_condition_mask_fn
 from scoresbibm.utils.edge_masks import get_edge_mask_fn
+
 
 def mean_std_per_node_id(data, node_ids):
     node_ids = node_ids.reshape(-1)
@@ -24,6 +23,7 @@ def mean_std_per_node_id(data, node_ids):
     mean = mean.reshape(-1,1)
     std = std.reshape(-1,1)
     return mean, std
+
 
 def get_z_score_fn(data_mean_per_node_id, data_std_per_node_id):
 

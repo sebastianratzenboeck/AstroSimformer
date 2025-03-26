@@ -313,7 +313,6 @@ class Empirical(Distribution):
             # assert probs.shape == values.shape, "probs shape mismatch"
             self.probs = jnp.atleast_1d(probs)
 
-
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
 
     def sample(self, key, sample_shape=()):

@@ -1,9 +1,7 @@
 import jax
-import jax.numpy as jnp
-
 import haiku as hk
 
-from jaxtyping import Array, PyTree
+from jaxtyping import Array
 from typing import Callable, Optional
 
 from .attention import MultiHeadAttention

@@ -3,14 +3,11 @@ import jax.numpy as jnp
 from jax.random import PRNGKeyArray
 
 from functools import partial
-from typing import Callable, Union, Optional
+from typing import Callable, Union
 from jaxtyping import Array
 
-from probjax.distributions import Distribution, Independent, Normal
-from probjax.distributions.discrete import Empirical
+from probjax.distributions import Distribution, Normal
 from probjax.utils.linalg import (
-    is_matrix,
-    is_diagonal_matrix,
     transition_matrix,
     matrix_fraction_decomposition,
 )
@@ -26,7 +23,8 @@ class BaseSDE(Distribution):
 
         dX_t = f(t, X_t)dt + g(t, X_t)dW_t
 
-        where f and g are the drift and diffusion functions respectively. We assume that the initial distribution is given by p0 at time t=0.
+        where f and g are the drift and diffusion functions respectively.
+        We assume that the initial distribution is given by p0 at time t=0.
 
         Args:
             drift (Callable): Drift function
@@ -395,7 +393,6 @@ class OrnsteinUhlenbeck(BaseSDE):
 
 
 class VPSDE(LinearTimeVariantSDE):
-    
     def __init__(
         self,
         p0: Distribution,
@@ -420,9 +417,7 @@ class VPSDE(LinearTimeVariantSDE):
         shape = ts.shape
         ts = jnp.expand_dims(
             ts,
-            axis=(
-                -i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)
-            ),
+            axis=(-i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)),
         )
         mu = self.marginal_mean(ts)
         return mu.reshape(shape + self.batch_shape + self.event_shape)
@@ -448,9 +443,7 @@ class VPSDE(LinearTimeVariantSDE):
         shape = ts.shape
         ts = jnp.expand_dims(
             ts,
-            axis=(
-                -i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)
-            ),
+            axis=(-i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)),
         )
         var = self.marginal_variance(ts)
         return var.reshape(shape + self.batch_shape + self.event_shape)
@@ -511,9 +504,7 @@ class VESDE(LinearTimeVariantSDE):
         shape = ts.shape
         ts = jnp.expand_dims(
             ts,
-            axis=(
-                -i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)
-            ),
+            axis=(-i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)),
         )
         mu = self.marginal_mean(ts)
         return mu.reshape(shape + self.batch_shape + self.event_shape)
@@ -522,13 +513,10 @@ class VESDE(LinearTimeVariantSDE):
         shape = ts.shape
         ts = jnp.expand_dims(
             ts,
-            axis=(
-                -i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)
-            ),
+            axis=(-i for i in range(1, len(self.batch_shape) + len(self.event_shape) + 1)),
         )
         var = self.marginal_variance(ts)
         return var.reshape(shape + self.batch_shape + self.event_shape)
-    
 
     def marginal_variance(self, ts: Array, x0=None, **kwargs) -> Array:
         if x0 is None:

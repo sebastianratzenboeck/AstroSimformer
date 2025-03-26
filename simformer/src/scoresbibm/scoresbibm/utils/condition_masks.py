@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import jax.random as jrandom
 
 from functools import partial
 

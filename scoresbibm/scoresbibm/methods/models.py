@@ -743,8 +743,6 @@ class AllConditionalScoreModel(AllConditionalModel):
         q = self._init_cns(x_o, num_steps, node_id=node_id, condition_mask=condition_mask, edge_mask=edge_mask, meta_data=meta_data, **kwargs)
         return q.log_prob(val)
     
-    
-    
     def sample_batched(self, num_samples, x_o, node_id=None, condition_mask=None, edge_mask=None, meta_data=None, num_steps=None, rng=None, **kwargs):
         @jax.vmap
         def get_batched_samples(keys,x_os):
@@ -760,7 +758,6 @@ class AllConditionalScoreModel(AllConditionalModel):
             return log_probs
 
         return get_batched_log_probs(val,x_o)
-    
     
     def compute_coverage_statistic(self, joint_samples, condition_mask=None, num_bins=20, rng=None, max_batch_sampling=None, max_batch_log_probs=250, sample_kwargs={}, log_prob_kwargs={"method":"euler"}):
         # Deprecated ...
@@ -813,12 +810,6 @@ class AllConditionalScoreModel(AllConditionalModel):
         alphas = jnp.concatenate([jnp.array([0.]), alphas, jnp.array([1.])])
         covs = jnp.concatenate([jnp.array([0.]), covs, jnp.array([1.])])
         return alphas, covs
-        
-        
-
-        
-        
-        
 
 
     def set_default_edge_mask_fn(self, edge_mask_fn):
@@ -962,10 +953,7 @@ class AllConditionalScoreModel(AllConditionalModel):
         best_latent = latents[idx]
 
         return best_latent,latents, log_probs
-        
-    
-   
-        
+
 
     def __getstate__(self) -> object:
         state = self.__dict__.copy()
