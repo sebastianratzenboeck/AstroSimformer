@@ -3,8 +3,8 @@ from pygaia.errors.spectroscopic import radial_velocity_uncertainty
 from pygaia.errors.astrometric import parallax_uncertainty
 from gaiaunlimited.selectionfunctions import DR3SelectionFunctionTCG
 from gaiaunlimited.scanninglaw import GaiaScanningLaw
-from utils.cluster_sampler import ClusterSampler
-from utils.PhotoUncertainty import IRPhotoUncertainty, Edr3LogMagUncertainty
+from cluster_sampler import ClusterSampler
+from PhotoUncertainty import IRPhotoUncertainty, Edr3LogMagUncertainty
 
 
 class PhotHandler:

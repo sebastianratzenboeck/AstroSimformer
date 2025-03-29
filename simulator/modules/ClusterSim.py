@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import ICRS, Galactic
 from astropy import units as u
-from utils.cluster_sampler import ClusterSampler
-from utils.compute_uncertainties import UncertaintyHandler
-from utils.compute_observables import ErrorBase
+from cluster_sampler import ClusterSampler
+from compute_uncertainties import UncertaintyHandler
+from compute_observables import ErrorBase
 
 
 # ------ Path files ------

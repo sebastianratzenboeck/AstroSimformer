@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from astropy import units as u
 from astropy.coordinates import ICRS, Galactic, SkyCoord
-from utils.ClusterPhotometry import ClusterPhotometry
+from ClusterPhotometry import ClusterPhotometry
 
 
 class ClusterSampler(ClusterPhotometry):

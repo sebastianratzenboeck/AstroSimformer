@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 import pandas as pd
-from utils.compute_uncertainties import UncertaintyHandler
+from compute_uncertainties import UncertaintyHandler
 
 
 class ErrorBase:

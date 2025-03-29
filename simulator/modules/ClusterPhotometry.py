@@ -1,8 +1,8 @@
 import imf
 import numpy as np
 import pandas as pd
-from utils.isochrones import ParsecGaia, ParsecIR
-from utils.extinction_correction import ExtinctionCorrection
+from isochrones import ParsecGaia, ParsecIR
+from extinction_correction import ExtinctionCorrection
 
 
 class ClusterPhotometry(ExtinctionCorrection):

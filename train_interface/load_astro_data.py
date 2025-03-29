@@ -4,7 +4,7 @@ import numpy as np
 import jax.random as jrandom
 import jax.numpy as jnp
 from sklearn.impute import KNNImputer
-from new.Data import normalize_data, normalize_with_params
+from train_interface.data_handling import normalize_data, normalize_with_params
 
 
 

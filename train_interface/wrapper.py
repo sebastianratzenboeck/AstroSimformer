@@ -4,7 +4,7 @@ from jax import random as jrandom
 from functools import partial
 from probjax.utils.sdeint import sdeint
 from train_interface.model_trainer import TrainScoreModel
-from new.Data import denormalize_data
+from train_interface.data_handling import denormalize_data
 
 
 

@@ -1,11 +1,11 @@
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import jax.numpy as jnp
-from scipy.stats import gaussian_kde
 from sbi.analysis import pairplot
+
+
 def plot_pairplot_kde(samples, feature_labels, title="Pair Plot of Features", bins=100):
     """
     Creates a detailed pairplot with density plots using Matplotlib.
@@ -88,8 +88,6 @@ def plot_pairplot_comp_kde(samples1, samples2, feature_labels, title="Pair Plot 
     # Number of features
     n_features = len(feature_labels)
     
-
-    
     # Initialize the Matplotlib figure with improved spacing
     fig, axes = plt.subplots(n_features, n_features, 
                               figsize=(4 * n_features, 4 * n_features), 
@@ -169,17 +167,29 @@ def plot_pairplot_comp_kde(samples1, samples2, feature_labels, title="Pair Plot 
     plt.show()
     plt.close()  # Close the plot to free memory
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 def plot_pairplot_comp_kde2(samples1, samples2, feature_labels, title="Pair Plot of Features", bins=150):
+    """
+    Function to generate a pair plot comparing two datasets (samples1 and samples2) with consistent axis scaling.
+    
+    Args:
+        samples1 (array-like): First dataset to plot.
+        samples2 (array-like): Second dataset to plot.
+        feature_labels (list of str): Feature names to label axes.
+        title (str): Title for the plot.
+        bins (int): Number of bins for density and histogram plots.
+    """
     # Ensure input samples are a DataFrame
     df1 = pd.DataFrame(samples1, columns=feature_labels)
     df2 = pd.DataFrame(samples2, columns=feature_labels)
     
     # Number of features
     n_features = len(feature_labels)
+    
+    # Determine global min and max for consistent axis scaling
+    global_min = df1.min().min(), df2.min().min()
+    global_max = df1.max().max(), df2.max().max()
+    axis_limits = (min(global_min), max(global_max))
     
     # Initialize the Matplotlib figure with improved spacing
     fig, axes = plt.subplots(n_features, n_features, 
@@ -199,6 +209,7 @@ def plot_pairplot_comp_kde2(samples1, samples2, feature_labels, title="Pair Plot
                 ax.hist(df2[feature1], bins=bins, density=True, 
                         alpha=0.5, edgecolor='white', label='Dataset 2', color='red', linewidth=1.5)
 
+                ax.set_xlim(axis_limits)
                 ax.set_ylabel("Density", fontsize=12)
                 ax.set_xlabel(feature1, fontsize=12)
                 ax.set_title(f"Density Comparison for {feature1}", fontsize=14)
@@ -207,27 +218,27 @@ def plot_pairplot_comp_kde2(samples1, samples2, feature_labels, title="Pair Plot
                 x1 = df1[feature2]
                 y1 = df1[feature1]
                 
-                h1, x_edges, y_edges = np.histogram2d(x1, y1, bins=bins)
+                h1, x_edges, y_edges = np.histogram2d(x1, y1, bins=bins, range=[axis_limits, axis_limits])
                 h1 = h1.T
                 
                 h1_log = np.log1p(h1)
                 
-                ax.imshow(h1_log, extent=[x_edges[0], x_edges[-1], 
-                                          y_edges[0], y_edges[-1]], 
+                ax.imshow(h1_log, extent=[axis_limits[0], axis_limits[1], 
+                                          axis_limits[0], axis_limits[1]], 
                           origin='lower', aspect='auto', alpha=0.8)
             elif i > j:
                 # Lower triangle: Dataset 2's 2D density plot, rotated 90 degrees left
                 x2 = df2[feature1]
                 y2 = df2[feature2]
                 
-                h2, x_edges, y_edges = np.histogram2d(x2, y2, bins=bins)
+                h2, x_edges, y_edges = np.histogram2d(x2, y2, bins=bins, range=[axis_limits, axis_limits])
                 h2 = h2.T
                 
                 h2_log = np.log1p(h2)
                 
                 # Rotate plot by switching x and y axes
-                ax.imshow(h2_log, extent=[y_edges[0], y_edges[-1], 
-                                          x_edges[0], x_edges[-1]], 
+                ax.imshow(h2_log, extent=[axis_limits[0], axis_limits[1], 
+                                          axis_limits[0], axis_limits[1]], 
                           origin='lower', aspect='auto', alpha=0.8)
             
             # Refine tick and label styling
@@ -251,9 +262,6 @@ def plot_pairplot_comp_kde2(samples1, samples2, feature_labels, title="Pair Plot
     plt.show()
     plt.close()  # Close the plot to free memory
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
 def plot_pairplot_comp_kde3(samples1, samples2, feature_labels, title="Pair Plot of Features", bins=150):
     """
@@ -318,7 +326,6 @@ def plot_pairplot_comp_kde3(samples1, samples2, feature_labels, title="Pair Plot
     plt.show()
 
 
-
 def replace_nan_with_min(data):
     """
     Replaces NaN values in a JAX array with the minimum non-NaN value from the entire dataset.
@@ -339,7 +346,6 @@ def replace_nan_with_min(data):
     data_filled = jnp.where(nan_mask, min_value, data)
     
     return data_filled
-# Helper to create folder if it doesn't exist
 
 
 # Updated pairplot function using Matplotlib
@@ -466,8 +472,11 @@ def plot_pairplot_comparison_seb_math(samples1, samples2, feature_labels, datase
     plt.show()
     plt.close()  # Close the plot to free memory
 
+
 # Pairplot comparison function
-def plot_pairplot_comparison_points(samples1, samples2, feature_labels, dataset_labels=("Dataset 1", "Dataset 2"), title="Pair Plot Comparison of Features"):
+def plot_pairplot_comparison_points(
+        samples1, samples2, feature_labels, dataset_labels=("Dataset 1", "Dataset 2"), title="Pair Plot Comparison of Features"
+):
     """
     Creates and saves a pairplot comparing two datasets using Matplotlib.
 
@@ -484,7 +493,6 @@ def plot_pairplot_comparison_points(samples1, samples2, feature_labels, dataset_
     
     # Number of features
     n_features = len(feature_labels)
-
     
     # Initialize the Matplotlib figure
     fig, axes = plt.subplots(n_features, n_features, figsize=(3 * n_features, 3 * n_features))
@@ -506,8 +514,13 @@ def plot_pairplot_comparison_points(samples1, samples2, feature_labels, dataset_
                 ax.legend(fontsize=8, loc='upper right')
             else:
                 # Off-diagonal: Scatter plots for each dataset
-                for dataset, color, label in zip(datasets, colors, labels):
-                    ax.scatter(dataset[feature2], dataset[feature1], alpha=0.6, s=10, color=color, label=label if i == 0 and j == 1 else None)
+                for k, (dataset, color, label) in enumerate(zip(datasets, colors, labels)):
+                    zorder = k if i > j else 2-k  # Adjust zorder based on position
+                    ax.scatter(
+                        dataset[feature2], dataset[feature1], alpha=0.2, s=5,
+                        color=color, label=label if i == 0 and j == 1 else None,
+                        zorder=zorder
+                    )
             
             # Set labels for outer plots only
             if i == n_features - 1:
@@ -525,6 +538,7 @@ def plot_pairplot_comparison_points(samples1, samples2, feature_labels, dataset_
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
     plt.close()  # Close the plot to free memory
+
 
 def plot_pairplot_comparison_seb_sns(samples1, samples2, feature_labels, dataset_labels=("Dataset 1", "Dataset 2"), title="Pair Plot Comparison of Features"):
     """
@@ -556,56 +570,6 @@ def plot_pairplot_comparison_seb_sns(samples1, samples2, feature_labels, dataset
     # Save the plot
     plt.show()  # Display the plot
 
-# Updated pairplot function using Matplotlib
-def create_pairplot_start(samples, labels, title="Pair Plot of Features"):
-    """
-    Creates and saves a pairplot for a single dataset using Matplotlib.
-
-    Parameters:
-        samples (numpy.ndarray): Array of sample data with shape (n_samples, n_features).
-        feature_labels (list): List of labels for the features.
-        title (str): Title for the plot.
-    """
-    # Ensure input samples are a DataFrame
-    df = pd.DataFrame(samples.reshape(-1, n_features), columns=labels)
-    feature_labels = labels
-    # Number of features
-    n_features = len(feature_labels)
-    
-
-    
-    # Initialize the Matplotlib figure
-    fig, axes = plt.subplots(n_features, n_features, figsize=(3 * n_features, 3 * n_features))
-    fig.suptitle(title, fontsize=16)
-    
-    # Plot pairwise relationships
-    for i, feature1 in enumerate(feature_labels):
-        for j, feature2 in enumerate(feature_labels):
-            ax = axes[i, j]
-            if i == j:
-                # Diagonal: Kernel Density Estimate (KDE)
-                ax.hist(df[feature1], bins=30, alpha=0.7, color='skyblue', density=True)
-                ax.set_ylabel("Density", fontsize=10)
-            else:
-                # Off-diagonal: Scatter plots
-                ax.scatter(df[feature2], df[feature1], alpha=0.6, s=10, color='steelblue')
-            
-            # Set labels for outer plots only
-            if i == n_features - 1:
-                ax.set_xlabel(feature2, fontsize=10)
-            if j == 0:
-                ax.set_ylabel(feature1, fontsize=10)
-            
-            # Hide inner tick labels
-            if i < n_features - 1:
-                ax.xaxis.set_visible(False)
-            if j > 0:
-                ax.yaxis.set_visible(False)
-    
-    # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
-    plt.close()  # Close the plot to free memory
 
 def plot_sbi_pairplot(samples, feature_labels, title="SBI Pair Plot of Features"):
     """

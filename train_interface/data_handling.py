@@ -1,4 +1,3 @@
-from jax.random import PRNGKey
 import jax.numpy as jnp
 import jax.random as jrandom
 
@@ -93,61 +92,3 @@ def denormalize_data(normalized_data, means, stds):
     return denormalized
 
 
-def generate_data(key: PRNGKey, n: int, nan_fraction=0.1):
-    key1, key2, key3, key4, key5 = jrandom.split(key, 5)
-    theta1 = jrandom.normal(key1, (n, 1)) * 3
-    theta2 = jrandom.normal(key4, (n, 1)) * 2
-    
-    x1 = 2 * jnp.sin(theta1) + jrandom.normal(key2, (n, 1)) * 0.5
-    x2 = 0.1 * theta1**2 + 0.5 * jnp.abs(x1) * jrandom.normal(key3, (n, 1))
-    x3 = 0.5 * theta2 + 0.2 * jnp.abs(x2) * jrandom.normal(key5, (n, 1))
-    
-    data = jnp.concatenate([theta1, theta2, x1, x2, x3], axis=1).reshape(n, -1, 1)
-    data_with_nans = random_nan(data, key, nan_fraction)
-    
-    # Normalize data
-    normalized_data, means, stds = normalize_data(data_with_nans)
-    
-    return normalized_data, means, stds
-
-
-def denormalize_data(normalized_data: jnp.ndarray, means: jnp.ndarray, 
-                     stds: jnp.ndarray) -> jnp.ndarray:
-    """
-    Reverse the normalization process to recover the original scale of the data.
-    
-    Args:
-        normalized_data: Array of shape (n_samples, time_steps, n_features)
-        means: Mean values used in normalization (shape: n_features)
-        stds: Standard deviation values used in normalization (shape: n_features)
-        
-    Returns:
-        denormalized_data: Array in original scale
-    """
-    # Reshape means and stds for broadcasting
-    means_broadcast = means.reshape(1, 1, -1)  # Shape: (1, 1, n_features)
-    stds_broadcast = stds.reshape(1, 1, -1)    # Shape: (1, 1, n_features)
-    # Reverse the normalization
-    denormalized = normalized_data * stds_broadcast + means_broadcast
-    return denormalized
-
-
-def denormalize_data_try(normalized_data, means, stds):
-    """
-    Reverse the normalization process to recover the original scale of the data.
-    
-    Args:
-        normalized_data: Normalized array
-        means: Mean values used in normalization
-        stds: Standard deviation values used in normalization
-        
-    Returns:
-        denormalized_data: Array in original scale
-    """
-    # Reshape to (n, features) for easier processing
-    data_reshaped = normalized_data[:,-1,:]
-    # Reverse the normalization
-    denormalized = (data_reshaped * stds) + means
-    # Reshape back to original shape
-    denormalized = denormalized.reshape(normalized_data.shape)
-    return denormalized
