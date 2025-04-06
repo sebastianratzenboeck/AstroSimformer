@@ -24,6 +24,7 @@ class SimFormer(TrainScoreModel):
         score = self.model_fn(
             self.opt_params,
             t.reshape(-1, 1, 1),
+            # t.reshape(-1, 1),
             x.reshape(-1, len(self.node_ids), 1),
             self.node_ids,
             condition_mask[:len(self.node_ids)],

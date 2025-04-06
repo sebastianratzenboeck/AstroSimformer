@@ -16,6 +16,7 @@ class TrainScoreModel:
             self, key: jrandom.PRNGKey,
             data, sde, model_fn, params, T_min, nodes_max,
             batch_size=1024, lr=1e-3, inner_train_loop_size=1_000,
+            early_stopping_patience=20,
             model_check_point_dir=None
     ):
         self.key = key
@@ -29,6 +30,7 @@ class TrainScoreModel:
         self.node_ids = jnp.arange(nodes_max)
         self.batch_size = batch_size
         self.inner_train_loop_size = inner_train_loop_size
+        self.early_stopping_patience = early_stopping_patience
         self.model_check_point_dir = model_check_point_dir
         # This part is training the transformer model until a good result is reached which does not improve for some iterations
         # Assuming optax optimizer, params, and loss_fn are already defined
@@ -275,13 +277,14 @@ class TrainScoreModel:
                     if os.path.isdir(self.model_check_point_dir) and (epoch >= 5):
                         fname = os.path.join(self.model_check_point_dir, f"model_checkpoint_epoch_{epoch}.pkl")
                         # Save the best parameters
-                        save_params(best_params, fname)
+                        best_params_current = jax.tree_map(lambda x: x[0], best_params)
+                        save_params(best_params_current, fname)
                         print(f"Best parameters saved at epoch {epoch + 1}")
                 # ---- End of model checkpointing ----
             else:
                 no_improvement_counter += 1
             # Stop if no improvement over 5 iterations
-            if no_improvement_counter >= epochs//20:
+            if no_improvement_counter >= self.early_stopping_patience:
                 print("Stopping early due to no improvement.")
                 break
         # Retrieve final trained parameters (take the best parameters)

@@ -20,6 +20,6 @@
         "epochs": 1000
     },
     "DiffusionConfig": {
-        "time_steps": 500
+        "time_steps": 512
     }
 }
