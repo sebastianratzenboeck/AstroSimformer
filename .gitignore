@@ -18,3 +18,4 @@ dist/
 build/
 *.egg
 *.pyc
+.DS_Store
