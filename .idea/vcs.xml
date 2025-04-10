@@ -2,6 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../../code/StarPipeline" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/../../code/pystellibs" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../Chronos" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../SigMA" vcs="Git" />
   </component>

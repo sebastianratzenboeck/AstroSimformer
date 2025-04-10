@@ -7,6 +7,10 @@
     </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (AstroSimformer)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="pystellibs" />
+    <orderEntry type="module" module-name="pyextinction" />
+    <orderEntry type="module" module-name="StarPipeline" />
+    <orderEntry type="module" module-name="SimpleSimulator" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="GOOGLE" />
