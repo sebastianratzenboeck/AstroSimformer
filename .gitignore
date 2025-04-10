@@ -7,3 +7,4 @@
 /dataSources.local.xml
 /.idea/
 /model_checkpoint/*.pkl
+/venv1/
