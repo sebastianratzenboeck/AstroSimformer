@@ -1,18 +1,10 @@
-import jax
-
-from jax.core import Jaxpr, JaxprEqn, Literal, Var, Atom
 from jax.experimental.pjit import pjit_p
 from jax._src.util import safe_map as map
-from typing import Callable, Sequence, Tuple, Union, Optional, Any
+from typing import Sequence
 from jaxtyping import Array
 
-import math
-
-from probjax.utils.containers import PriorityQueue
 from probjax.core.jaxpr_propagation.utils import (
     Environment,
-    construct_jaxpr_graph,
-    ProcessingRule,
     ForwardProcessingRule,
 )
 
@@ -20,16 +12,12 @@ from probjax.core.jaxpr_propagation.utils import (
 
 
 def interpret(
-    jaxpr: Jaxpr,
-    consts: Sequence[Array],
-    invars: Sequence[Var],
-    inputs: Sequence[Array],
-    outvars: Sequence[Var],
-    process_eqn: ProcessingRule
-    | Callable[
-        [JaxprEqn, Sequence[Optional[Array]], Sequence[Optional[Array]]],
-        Tuple[Sequence[Var], Any],
-    ] = ForwardProcessingRule(),
+    jaxpr,
+    consts,
+    invars,
+    inputs,
+    outvars,
+    process_eqn = ForwardProcessingRule(),
 ):
     env = Environment()
 

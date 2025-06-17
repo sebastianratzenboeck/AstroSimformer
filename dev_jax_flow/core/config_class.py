@@ -1,7 +1,6 @@
 from dataclasses import dataclass, fields
 import json
 
-
 @dataclass
 class SDEConfig:
     """
@@ -69,3 +68,33 @@ def set_config_values(config, values):
     for field in fields(config):
         if field.name in values:
             setattr(config, field.name, values[field.name])
+
+
+def load_config(fname):
+    # Initialize the dataclasses with zero or default values
+    simformer_config = SimformerConfig()
+    transformer_config = TransformerConfig()
+    training_config = TrainingConfig()
+    diffusion_config = DiffusionConfig()
+
+    # Define values to set for each config parameter for multiple configurations
+    with open(fname, 'r') as f:
+        config_set = json.load(f)
+
+    set_config_values(simformer_config, config_set["SimformerConfig"])
+    set_config_values(transformer_config, config_set["TransformerConfig"])
+    set_config_values(training_config, config_set["TrainingConfig"])
+    set_config_values(diffusion_config, config_set["DiffusionConfig"])
+
+    out_dict = {
+        "dim_value": simformer_config.dim_value,
+        "dim_id": simformer_config.dim_id,
+        "dim_condition": simformer_config.dim_condition,
+        "num_heads": transformer_config.num_heads,
+        "num_layers": transformer_config.num_layers,
+        "attn_size": transformer_config.attn_size,
+        "widening_factor": transformer_config.widening_factor,
+        "epochs": training_config.epochs,
+        "time_steps": diffusion_config.time_steps
+    }
+    return out_dict

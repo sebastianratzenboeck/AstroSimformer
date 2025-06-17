@@ -9,12 +9,7 @@ import pickle
 
 
 def marginalize(x: Array):
-    # Ensure x is (T,)
-    if x.ndim == 2 and x.shape[1] == 1:
-        x = x[:, 0]
-    elif x.ndim != 1:
-        raise ValueError(f"Expected x of shape (T,) or (T, 1), got {x.shape}")
-
+    # x is a single datapoint (vmap for batch)
     nan_indices = jnp.isnan(x)
     edge_mask = ~(nan_indices[:, None] | nan_indices[None, :])
     return edge_mask

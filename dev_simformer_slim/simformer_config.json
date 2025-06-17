@@ -1,0 +1,26 @@
+{
+    "SDEConfig": {
+        "T": 1.0,
+        "T_min": 1e-2,
+        "sigma_min": 1e-3,
+        "sigma_max": 15.0
+    },
+    "SimformerConfig": {
+        "dim_value": 128,
+        "dim_id": 128,
+        "dim_condition": 16
+    },
+    "TransformerConfig": {
+        "num_heads": 8,
+        "num_layers": 3,
+        "attn_size": 128,
+        "widening_factor": 3
+    },
+    "TrainingConfig": {
+        "epochs": 1000
+    },
+    "DiffusionConfig": {
+        "time_steps": 512
+    }
+
+}

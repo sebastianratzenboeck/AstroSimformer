@@ -2,12 +2,8 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 import jax.random as jrandom
-
 from jaxtyping import Array, Float
 from jax.random import PRNGKey
-
-from functools import partial
-
 # Iterated integrals
 
 

@@ -1,9 +1,6 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 from jax import random
-from jax import lax
-from jax.scipy.special import erfinv, erf
 
 from jaxtyping import Array
 

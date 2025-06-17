@@ -1,10 +1,8 @@
 from typing import Any
 import jax.numpy as jnp
 from jax.tree_util import tree_flatten
-
 from jaxtyping import PyTree, Array
 from typing import Union
-
 from abc import abstractmethod
 from functools import total_ordering
 

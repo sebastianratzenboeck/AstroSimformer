@@ -3,17 +3,14 @@ import jax.numpy as jnp
 import jax.random as jrandom
 
 from jax import lax
-from jax import core
-from jax.tree_util import tree_leaves
 
 from functools import partial
-from jaxtyping import Array, Float, PyTree, Int
+from jaxtyping import Array, Float, Int
 from typing import Callable, Optional, Union
 from jaxtyping import PRNGKeyArray
 
-
-from probjax.utils.brownian import get_iterated_integrals_fn
-from probjax.utils.linalg import is_matrix, is_triangular_matrix
+from .brownian import get_iterated_integrals_fn
+from .linalg import is_triangular_matrix
 
 
 METHOD_STEP_FN = {}
