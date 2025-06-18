@@ -19,3 +19,9 @@ build/
 *.egg
 *.pyc
 .DS_Store
+
+# Jupyter Notebook checkpoints & notebooks
+.ipynb_checkpoints
+*.ipynb
+# Ignore Python virtual environment
+/venv1/
