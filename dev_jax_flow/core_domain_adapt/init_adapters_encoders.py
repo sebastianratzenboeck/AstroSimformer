@@ -8,10 +8,12 @@ def make_encoder(in_dim, out_dim, dropout_rate=0.0, use_batchnorm=False):
     def forward(x, is_training=True):
         layers = []
         layers.append(hk.Linear(out_dim))
+
         if use_batchnorm:
             layers.append(hk.BatchNorm(create_scale=True, create_offset=True, decay_rate=0.9))
             # note: this layer will need `is_training` at apply time
         layers.append(jax.nn.relu)
+
         if dropout_rate > 0:
             layers.append(lambda x: jnp.where(
                 is_training,
@@ -19,6 +21,7 @@ def make_encoder(in_dim, out_dim, dropout_rate=0.0, use_batchnorm=False):
                 x
             ))
         layers.append(hk.Linear(out_dim))
+
         def sequential(x):
             for layer in layers:
                 if isinstance(layer, hk.BatchNorm):
