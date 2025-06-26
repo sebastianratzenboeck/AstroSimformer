@@ -46,8 +46,11 @@ def build_transformer_model(
         # its identity, value, and whether it is conditioned or latent.
         # These tokens are processed by a transformer, with variable interactions controlled via an attention mask.
         embedding_net_value = lambda x: jnp.repeat(x, dim_value, axis=-1)
+        value_embeddings = embedding_net_value(x)
+        # ID embeddings for nodes
         embedding_net_id = hk.Embed(nodes_max, dim_id, w_init=hk.initializers.RandomNormal(stddev=3.0))
-
+        id_embeddings = embedding_net_id(node_ids)
+        # Condition embeddings
         condition_embedding = hk.get_parameter(
             "condition_embedding",
             shape=(1, 1, dim_condition),
@@ -56,8 +59,6 @@ def build_transformer_model(
         condition_embedding = condition_embedding * condition_mask
         condition_embedding = jnp.broadcast_to(condition_embedding, (batch_size, seq_len, dim_condition))
 
-        value_embeddings = embedding_net_value(x)
-        id_embeddings = embedding_net_id(node_ids)
         value_embeddings, id_embeddings = jnp.broadcast_arrays(value_embeddings, id_embeddings)
 
         x_encoded = jnp.concatenate([value_embeddings, id_embeddings, condition_embedding], axis=-1)

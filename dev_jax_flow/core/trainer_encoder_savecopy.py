@@ -9,27 +9,26 @@ from functools import partial
 from train_interface.utils import marginalize, marginalize_node, save_params
 
 
-def make_autoencoder(in_dim, hidden_dim):
+def make_encoder(in_dim, hidden_dim, out_dim):
     def forward(x):
-        encoder = MLP([hidden_dim], activation=jax.nn.relu, activate_final=True, name="encoder")
-        decoder = MLP([hidden_dim, in_dim], activation=jax.nn.relu, activate_final=False, name="decoder")
-        z = encoder(x)
-        x_hat = decoder(z)
-        return x_hat
+        return MLP([hidden_dim, out_dim], activation=jax.nn.sigmoid, activate_final=True)(x)
     return hk.without_apply_rng(hk.transform(forward))
 
 
-def encode_batch_fn(batch, encode_mask, encoder_apply, encoder_params):
-    x_encoded = batch[:, encode_mask, :]
+def blend_stop_gradient(z, alpha):
+    return jax.lax.stop_gradient(z) * (1 - alpha) + z * alpha
+
+
+def encode_batch_fn(batch, encode_mask, encoder_apply, encoder_params, alpha):
+    x_encoded = batch[:, encode_mask]
     if x_encoded.ndim == 3 and x_encoded.shape[-1] == 1:
-        x_encoded = x_encoded[..., 0]
-    x_pass = batch[:, ~encode_mask, :]
+        x_encoded = x_encoded[..., 0]  # Fix trailing singleton dim
+    x_pass = batch[:, ~encode_mask]
     if x_pass.ndim == 3 and x_pass.shape[-1] == 1:
         x_pass = x_pass[..., 0]
-    x_hat = encoder_apply(encoder_params, x_encoded)
-    # jax.debug.print("mse {}", jnp.mean(jnp.square(x_pass - x_hat)))
-    full_input = jnp.concatenate([x_hat, x_pass], axis=-1)
-    return full_input[..., None], jnp.mean(jnp.square(x_pass - x_hat))
+    z = encoder_apply(encoder_params, x_encoded)
+    z_stable = blend_stop_gradient(z, alpha)
+    return jnp.concatenate([z_stable, x_pass], axis=-1)[..., None]  # Add trailing singleton dim
 
 
 class TrainFlowModel:
@@ -48,8 +47,7 @@ class TrainFlowModel:
         early_stopping_patience=20,
         model_check_point_dir=None,
         encoder_hidden_dim=64,
-        alpha=0.2,
-        freeze_encoder_epoch=10
+        alpha=0.2
     ):
         self.key = key
         self.data = data
@@ -65,23 +63,20 @@ class TrainFlowModel:
         self.early_stopping_patience = early_stopping_patience
         self.model_check_point_dir = model_check_point_dir
         self.alpha = alpha
-        self.freeze_encoder_epoch = freeze_encoder_epoch
         self.current_epoch = 0
 
         self.optimizer = optax.adam(lr)
         self.opt_state = self.optimizer.init(params)
         self.opt_params = None
 
+        # Setup encoder and EMA buffer
         in_dim = int(jnp.sum(self.encode_mask))
-        self.encoder_fn = make_autoencoder(in_dim, encoder_hidden_dim)
+        print("in_dim ", in_dim)
+        self.encoder_fn = make_encoder(in_dim, encoder_hidden_dim, in_dim)
         self.encoder_params = self.encoder_fn.init(key, jnp.zeros((1, in_dim)))
-        self.encoder_optimizer = optax.adam(lr)
-        self.encoder_opt_state = self.encoder_optimizer.init(self.encoder_params)
-
-    def freeze_encoder_decoder(self):
-        return self.current_epoch >= self.freeze_encoder_epoch
 
     def linear_alpha_schedule(self, alpha_start=0.0, alpha_end=1.0, warmup_epochs=10):
+        """Linearly increase alpha from alpha_start to alpha_end over warmup_epochs."""
         if self.current_epoch >= warmup_epochs:
             return alpha_end
         return alpha_start + (alpha_end - alpha_start) * (self.current_epoch / warmup_epochs)
@@ -100,29 +95,50 @@ class TrainFlowModel:
         mask = group_draws[:, self.condition_groups]
         return mask.astype(bool)
 
-    def loss_fn(self, params, encoder_params, key, alpha):
-        batch_raw = self.random_batch(key)
-        batch_xs, mse_loss = encode_batch_fn(
-            batch_raw,
+    def build_groupwise_edge_mask(self, key: jax.random.PRNGKey, marginalize_prob: float = 0.5) -> jnp.ndarray:
+        G = self.unique_groups.size
+        keep_matrix = jax.random.bernoulli(key, 1.0 - marginalize_prob, shape=(self.batch_size//5, G))
+        group_masks = jnp.stack([self.condition_groups == gid for gid in self.unique_groups], axis=0)
+        keep_mask = jnp.dot(keep_matrix, group_masks.astype(jnp.int32)) > 0
+        edge_mask = jnp.einsum("bi,bj->bij", keep_mask, keep_mask)
+        edge_mask = jnp.where(jnp.any(edge_mask, axis=(1, 2), keepdims=True), edge_mask, False)
+        all_dropped = ~jnp.any(edge_mask, axis=(1, 2))
+        edge_mask = jnp.where(all_dropped[:, None, None], jnp.ones_like(edge_mask), edge_mask)
+        return edge_mask
+
+    def loss_fn(self, params, key):
+        batch_xs = self.random_batch(key)
+        print("batch_xs.shape ", batch_xs.shape)
+        batch_xs = encode_batch_fn(
+            batch_xs,
             self.encode_mask,
             self.encoder_fn.apply,
-            encoder_params
+            self.encoder_params,
+            self.linear_alpha_schedule()
         )
         batch_xs_clean = batch_xs.copy()
         rng_time, rng_sample, rng_data, rng_condition, rng_edge_mask1, rng_edge_mask2 = jax.random.split(key, 6)
-
-        condition_mask = self.build_groupwise_condition_mask(rng_condition, condition_prob=0.333)
-        condition_mask_all_one = jnp.all(condition_mask, axis=-1, keepdims=True)
-        condition_mask *= ~condition_mask_all_one
-        condition_mask = condition_mask[..., None]
-
-        edge_masks = jnp.ones((self.batch_size, batch_xs.shape[1], batch_xs.shape[1]), dtype=jnp.bool_)
-
+        # condition_mask = self.build_groupwise_condition_mask(rng_condition, condition_prob=0.333)
+        # condition_mask_all_one = jnp.all(condition_mask, axis=-1, keepdims=True)
+        # condition_mask *= ~condition_mask_all_one
+        # ----- new condition mask -----
+        # Condition on the encoding mask
+        condition_mask = jnp.broadcast_to(self.encode_mask, (self.batch_size, self.nodes_max))[..., None].astype(int)
+        # ------------------------------
+        # ---- Edge mask for marginalization ----
+        # edge_mask = jnp.ones((4*self.batch_size//5, batch_xs.shape[1], batch_xs.shape[1]), dtype=jnp.bool_)
+        # marginal_mask = self.build_groupwise_edge_mask(key=rng_edge_mask1, marginalize_prob=0.1)
+        # edge_masks = jnp.concatenate([edge_mask, marginal_mask], axis=0)
+        # edge_masks = jax.random.choice(rng_edge_mask2, edge_masks, shape=(self.batch_size,), axis=0)
+        # margarita = jax.vmap(marginalize)(batch_xs.squeeze(-1))
+        # edge_masks = edge_masks * margarita
+        # ----- New edge mask -----
+        edge_masks = jnp.ones((self.batch_size, self.nodes_max, self.nodes_max), dtype=jnp.bool_)
+        # ----------------------------------------
         x0 = jrandom.normal(rng_sample, shape=(self.batch_size, self.nodes_max, 1))
         x1 = jnp.nan_to_num(batch_xs_clean, 0.0)
         loss_mask = jnp.isnan(batch_xs)
-
-        flow_loss = flow_matching_loss(
+        loss = flow_matching_loss(
             params,
             key,
             self.model_fn,
@@ -135,26 +151,14 @@ class TrainFlowModel:
             t_min=0.0,
             t_max=1.0
         )
-        total_loss = mse_loss + flow_loss
-        return total_loss, (mse_loss, flow_loss)
+        return loss
 
     @partial(jax.jit, static_argnums=(0,))
-    def update(self, params, encoder_params, opt_state, encoder_opt_state, key, alpha):
-        (loss, (mse_loss, flow_loss)), grads = jax.value_and_grad(
-            self.loss_fn, has_aux=True, argnums=(0, 1))(params, encoder_params, key, alpha)
-        param_grads, encoder_grads = grads
-
-        updates, new_opt_state = self.optimizer.update(param_grads, opt_state, params)
+    def update(self, params, opt_state, key):
+        loss, grads = jax.value_and_grad(self.loss_fn)(params, key)
+        updates, new_opt_state = self.optimizer.update(grads, opt_state, params)
         new_params = optax.apply_updates(params, updates)
-
-        if not self.freeze_encoder_decoder():
-            encoder_updates, new_encoder_opt_state = self.encoder_optimizer.update(encoder_grads, encoder_opt_state, encoder_params)
-            new_encoder_params = optax.apply_updates(encoder_params, encoder_updates)
-        else:
-            new_encoder_opt_state = encoder_opt_state
-            new_encoder_params = encoder_params
-
-        return loss, new_params, new_opt_state, new_encoder_params, new_encoder_opt_state
+        return loss, new_params, new_opt_state
 
     def fit(self, epochs=100):
         best_loss = float('inf')
@@ -164,12 +168,10 @@ class TrainFlowModel:
 
         for epoch in range(epochs):
             self.current_epoch = epoch
-            alpha = self.linear_alpha_schedule()
             epoch_loss = 0.0
             for _ in range(self.inner_train_loop_size):
                 key, subkey = jrandom.split(key)
-                loss, self.params, self.opt_state, self.encoder_params, self.encoder_opt_state = self.update(
-                    self.params, self.encoder_params, self.opt_state, self.encoder_opt_state, subkey, alpha)
+                loss, self.params, self.opt_state = self.update(self.params, self.opt_state, subkey)
                 epoch_loss += loss / self.inner_train_loop_size
 
             print(f"Epoch {epoch+1}: loss = {epoch_loss:.6f}")

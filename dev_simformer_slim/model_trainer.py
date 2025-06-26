@@ -291,3 +291,100 @@ class TrainScoreModel:
         # Retrieve final trained parameters (take the best parameters)
         self.opt_params = jax.tree_util.tree_map(lambda x: x[0], best_params)
         return
+
+
+# @partial(jax.jit, static_argnames=("model_fn", "mean_fn", "std_fn"))
+# def conditional_flow_and_score_matching_loss(
+#         params: PyTree,
+#         key: jrandom.PRNGKey,
+#         times: Array,
+#         xs_source: Array,
+#         xs_target: Array,
+#         model_fn: Callable,
+#         mean_fn: Callable,
+#         std_fn: Callable,
+#         **kwargs,
+# ):
+#     """This function computes the conditional flow matching loss and score matching loss. By setting estimate_score to False, only the conditional flow matching loss is computed.
+#     By setting estimate_score to True, both the conditional flow matching loss and score matching loss are computed.
+#     Args:
+#         params (PyTree): Parameters of the model_fn given as a PyTree.
+#         key (PRNGKey): Random key.
+#         times (Array): Time points, should be broadcastable to shape (batch_size, 1).
+#         xs_source (Array): Marginal distribution at time t=0, refered to as source distribution.
+#         xs_target (Array): Marginal distribution at time t, refered to as target distribution.
+#         model_fn (Callable): Model_fn that takes parameters, times, and samples as input and returns the vector field and optionally the marginal score. Should be a function of the form model_fn(params, times, xs_t) -> v_t(, s_t).
+#         mean_fn (Callable): The mean function of the Gaussian probability path, should satisfy the following:
+#                                 - mean_fn(xs_source, xs_target, 0) -> xs_source
+#                                 - mean_fn(xs_source, xs_target, 1) -> xs_target
+#                                 - Lipschitz continuous in time
+#         std_fn (Callable): The standard deviation function of the Gaussian probability path, should satisfy the following:
+#                                 - std_fn(xs_source, xs_target, 0) -> 0
+#                                 - std_fn(xs_source, xs_target, 1) -> 0
+#                                 - std_fn(xs_source, xs_target, t) > 0 for all t in [0, 1]
+#                                 - Two times continuously differentiable in time.
+#     Returns:
+#         loss_flow: Respective loss functions
+#     """
+#     # Sample x_t
+#     eps = jax.random.normal(key, shape=xs_source.shape)
+#     xs_t = (
+#             mean_fn(xs_source, xs_target, times) + std_fn(xs_source, xs_target, times) * eps
+#     )
+#     # Compute u_t -> For flow matching
+#     # This is valid for Gaussian probability paths, which is currented here.
+#     t = jnp.broadcast_to(
+#         times, xs_target.shape
+#     )  # Pad to x shape for jax.grad -> x.shape
+#     std_fn_grad = jax.grad(lambda x_s, x_t, t: std_fn(x_s, x_t, t).sum(), argnums=2)
+#     mean_fn_grad = jax.grad(lambda x_s, x_t, t: mean_fn(x_s, x_t, t).sum(), argnums=2)
+#     u_t = std_fn_grad(xs_source, xs_target, t) * eps + mean_fn_grad(
+#         xs_source, xs_target, t
+#     )
+#     # Compute vector field -> Flow matching loss
+#     v_t = model_fn(params, times, xs_t, *kwargs)
+#     # Compute loss
+#     loss = jnp.mean(jnp.sum((v_t - u_t) ** 2, axis=-1))
+#
+#     return loss
+#
+#
+#
+# def sample_flow_matching(
+#     params,
+#     model_fn,
+#     key: jrandom.PRNGKey,
+#     condition_mask: Array,
+#     condition_values: Array,
+#     node_ids: Array,
+#     edge_mask: Array,
+#     steps: int = 64,
+# ) -> Array:
+#     """
+#     Sample from the learned flow model given arbitrary conditioning.
+#
+#     - params: model parameters
+#     - model_fn: transformer that returns vector field v_t
+#     - key: PRNG key for noise init
+#     - condition_mask: boolean mask of observed tokens (True=observed)
+#     - condition_values: values for observed tokens
+#     - node_ids, edge_mask: as in training
+#     - steps: number of integration steps
+#     """
+#     # initialize unobserved tokens with Gaussian noise
+#     eps = jax.random.normal(key, shape=condition_values.shape)
+#     x = jnp.where(condition_mask, condition_values, eps)
+#     # integrate from t=1 down to t=0
+#     ts = jnp.linspace(1.0, 0.0, steps + 1)
+#
+#     def drift(x, t):
+#         # compute vector field only on unobserved
+#         v = model_fn(params, jnp.array([t]), x, node_ids, condition_mask, edge_mask)
+#         return v * (~condition_mask)
+#
+#     # simple Euler integration
+#     dt = ts[1] - ts[0]
+#     for t in ts[:-1]:
+#         x = x + dt * drift(x, t)
+#
+#     return x

@@ -1,13 +1,13 @@
 {
     "SimformerConfig": {
-        "dim_value": 128,
-        "dim_id": 128,
-        "dim_condition": 16
+        "dim_value": 5,
+        "dim_id": 5,
+        "dim_condition": 3
     },
     "TransformerConfig": {
-        "num_heads": 8,
+        "num_heads": 2,
         "num_layers": 3,
-        "attn_size": 128,
+        "attn_size": 10,
         "widening_factor": 3
     },
     "TrainingConfig": {

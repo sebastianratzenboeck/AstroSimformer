@@ -27,6 +27,7 @@ def marginalize_node(rng: jrandom.PRNGKey, edge_mask: Array):
     edge_mask = edge_mask.at[idx, idx].set(True) # Keep the self-loop
     return edge_mask
 
+
 def safe_weight_fn(t):
     """
     Example of a numerically stable weight function.

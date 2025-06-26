@@ -6,14 +6,14 @@
         "sigma_max": 15.0
     },
     "SimformerConfig": {
-        "dim_value": 128,
-        "dim_id": 128,
-        "dim_condition": 16
+        "dim_value": 20,
+        "dim_id": 20,
+        "dim_condition": 10
     },
     "TransformerConfig": {
-        "num_heads": 8,
+        "num_heads": 4,
         "num_layers": 3,
-        "attn_size": 128,
+        "attn_size": 20,
         "widening_factor": 3
     },
     "TrainingConfig": {

@@ -91,28 +91,54 @@ class TrainFlowModel:
         # batch_xs, batch_xs_clean = generate_data_combined_normal_par(key, batch_size, means, stds)
         # Create a binary condition mask indicating which nodes should be conditioned on
         # condition_mask = jax.random.bernoulli(rng_condition, 0.333, shape=(batch_xs.shape[0], batch_xs.shape[1]))
-        condition_mask = self.build_groupwise_condition_mask(rng_condition, condition_prob=0.333)
-        # Prevent conditioning on all nodes
+
+        # Condition mask -> randomly condition on some data.
+        condition_mask = jax.random.bernoulli(rng_condition, 0.333, shape=(batch_xs.shape[0], batch_xs.shape[1]))
         condition_mask_all_one = jnp.all(condition_mask, axis=-1, keepdims=True)
-        condition_mask *= ~condition_mask_all_one
-        # Expand dimensions of the condition mask for further computations
+        condition_mask *= condition_mask_all_one  # Avoid conditioning on all nodes -> nothing to train...
         condition_mask = condition_mask[..., None]
-        # jax.debug.print("condition mask shape {}", condition_mask.shape)
-        # jax.debug.print("condition mask is {}",condition_mask)
-        # Create an initial dense edge mask (fully connected graph structure) for a subset of the batch
-        edge_mask = jnp.ones((4 * self.batch_size // 5, batch_xs.shape[1], batch_xs.shape[1]), dtype=jnp.bool_)
-        # Generate sparse masks by marginalizing over a subset of the batch
-        marginal_mask = self.build_groupwise_edge_mask(
-            key=rng_edge_mask1, marginalize_prob=0.2
-        )
-        # Concatenate the dense and sparse edge masks
+        # Alternatively you can also set the condition mask manually to specific conditional distributions.
+        # condition_mask = jnp.zeros((3,), dtype=jnp.bool_)  # Joint mask
+        # condition_mask = jnp.array([False, True, True], dtype=jnp.bool_)  # Posterior mask
+        # condition_mask = jnp.array([True, False, False], dtype=jnp.bool_)  # Likelihod mask
+
+        # You can also structure the base mask!
+        edge_mask = jnp.ones(
+            (4 * batch_xs.shape[0] // 5, batch_xs.shape[1], batch_xs.shape[1]), dtype=jnp.bool_)  # Dense default mask
+
+        # Optional: Include marginal consistency
+        marginal_mask = jax.vmap(marginalize_node, in_axes=(0, None))(jax.random.split(
+            rng_edge_mask1, (batch_xs.shape[0] // 5,)), edge_mask[0])
         edge_masks = jnp.concatenate([edge_mask, marginal_mask], axis=0)
-        # Randomly select between dense and sparse edge masks for each sample
-        edge_masks = jax.random.choice(rng_edge_mask2, edge_masks, shape=(self.batch_size,), axis=0)
-        # Apply marginalization based on NaN values in batch_xs to update the edge mask
-        margarita = jax.vmap(marginalize)(batch_xs.squeeze(-1))  # Produces a mask with True where edges should be active
-        # log the shape of the margarita mask
-        edge_masks = edge_masks * margarita  # Apply the margarita mask to the edge mask)
+        edge_masks = jax.random.choice(rng_edge_mask2, edge_masks, shape=(batch_xs.shape[0],),
+                                       axis=0)  # Randomly choose between dense and marginal mask
+        # ------------------------------
+        # Next code is because it we want to find the bug
+        # condition_mask = self.build_groupwise_condition_mask(rng_condition, condition_prob=0.333)
+        # # Prevent conditioning on all nodes
+        # condition_mask_all_one = jnp.all(condition_mask, axis=-1, keepdims=True)
+        # condition_mask *= ~condition_mask_all_one
+        # # Expand dimensions of the condition mask for further computations
+        # condition_mask = condition_mask[..., None]
+        # # jax.debug.print("condition mask shape {}", condition_mask.shape)
+        # # jax.debug.print("condition mask is {}",condition_mask)
+        # # Create an initial dense edge mask (fully connected graph structure) for a subset of the batch
+        # edge_mask = jnp.ones((4 * self.batch_size // 5, batch_xs.shape[1], batch_xs.shape[1]), dtype=jnp.bool_)
+        # # Generate sparse masks by marginalizing over a subset of the batch
+        # marginal_mask = self.build_groupwise_edge_mask(
+        #     key=rng_edge_mask1, marginalize_prob=0.2
+        # )
+        # # Concatenate the dense and sparse edge masks
+        # edge_masks = jnp.concatenate([edge_mask, marginal_mask], axis=0)
+        # # Randomly select between dense and sparse edge masks for each sample
+        # edge_masks = jax.random.choice(rng_edge_mask2, edge_masks, shape=(self.batch_size,), axis=0)
+        # # Apply marginalization based on NaN values in batch_xs to update the edge mask
+        # margarita = jax.vmap(marginalize)(batch_xs.squeeze(-1))  # Produces a mask with True where edges should be active
+        # # log the shape of the margarita mask
+        # edge_masks = edge_masks * margarita  # Apply the margarita mask to the edge mask)
+        # ------------------------------
+
+
         # jax.debug.print("edge mask shape {}", edge_masks.shape)
         # jax.debug.print("edge mask is {}",edge_masks)
         # Compute the loss using the denoising score matching function
