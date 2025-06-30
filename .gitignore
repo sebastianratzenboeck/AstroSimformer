@@ -25,3 +25,7 @@ build/
 *.ipynb
 # Ignore Python virtual environment
 /venv1/
+
+/dev_pytorch_post_flow/checkpoints/
+/dev_pytorch_post_flow/wandb/
+/dev_pytorch_post_flow/sbi-logs/
