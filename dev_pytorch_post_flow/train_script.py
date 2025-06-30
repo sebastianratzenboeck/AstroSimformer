@@ -115,7 +115,6 @@ def main(train_loader, val_loader, config):
 if __name__ == "__main__":
     np.random.seed(42)
     torch.set_default_device('cuda')
-
     # ———————— load data ————————
     fname_basel = '/n/home12/sratzenboeck/data_local/mock/cluster_field_1kpc_fundamentals_Bayestar2019_SED_BaSeL_June2025.parquet'
     fname_btsettl = '/n/home12/sratzenboeck/data_local/mock/cluster_field_1kpc_fundamentals_Edenhofer_SED_BTSettl_June2025_diffClusters.parquet'
@@ -280,7 +279,7 @@ if __name__ == "__main__":
         train_frac=0.9,
         batch_size=config['batch_size'],
         shuffle=True,
-        num_workers=32,
+        num_workers=30,
         generator=gen,
         pin_memory=True,
     )
