@@ -262,6 +262,11 @@ class DomainAdaptiveTrainer:
         self.ot_blur_min = ot_blur_min
 
         self.ot_loss_fn = SamplesLoss(backend="online", **geomloss_kwargs)
+        # 1) small per-modality normalizers
+        self.layer_norm_mod = nn.ModuleDict({
+            mod: nn.LayerNorm(self.model.context_nets[mod].output_layer.out_features)
+            for mod in self.model.modalities
+        })
         # 2) small final-context normalizer
         self.layer_norm_final = nn.LayerNorm(
             self.model.mod_transformer.out_proj.out_features
@@ -269,9 +274,9 @@ class DomainAdaptiveTrainer:
         self.loss_fn = nn.MSELoss()
         self.dim_theta = model.flow_net[-1].out_features
 
-    def _update_blur(self, epoch):
+    def _update_blur(self, epoch, num_epochs):
         # fraction of training completed
-        frac = epoch / max(1, self.num_epochs - 1)
+        frac = epoch / max(1, num_epochs - 1)
         # compute decay rate so that start→end over training
         decay_rate = (self.ot_blur_end / self.ot_blur_start) ** frac
         # exponential decay
@@ -349,7 +354,7 @@ class DomainAdaptiveTrainer:
             # boolean masks of shape (B,) indicating which samples actually have this modality
             present_sim = ~sim_mask[mod].all(dim=1)
             present_real = ~real_mask[mod].all(dim=1)
-            if ps.any() and pr.any():
+            if present_sim.any() and present_real.any():
                 s = sim_embs_norm[mod][present_sim]
                 r = real_embs_norm[mod][present_real]
                 loss_mod_ot += self.ot_loss_fn(s, r)
@@ -406,8 +411,8 @@ class DomainAdaptiveTrainer:
             'ramp':      ramp,
         }
     
-    def train_epoch(self, train_loader: DataLoader, epoch):
-        self._update_blur(epoch)
+    def train_epoch(self, train_loader: DataLoader, epoch, num_epochs):
+        self._update_blur(epoch, num_epochs)
         self.model.train()
         # stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
         stats = {'total': 0., 'flow': 0., 'ot_final': 0., 'pair': 0, 'ramp': 0}
