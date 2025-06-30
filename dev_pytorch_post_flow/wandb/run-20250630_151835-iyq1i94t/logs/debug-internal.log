@@ -1,0 +1,23 @@
+{"time":"2025-06-30T15:18:36.57193967-04:00","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"/n/home12/sratzenboeck/code/AstroSimformer/dev_pytorch_post_flow/wandb/run-20250630_151835-iyq1i94t/logs/debug-core.log"}
+{"time":"2025-06-30T15:18:36.78536182-04:00","level":"INFO","msg":"stream: created new stream","id":"iyq1i94t"}
+{"time":"2025-06-30T15:18:36.7853842-04:00","level":"INFO","msg":"stream: started","id":"iyq1i94t"}
+{"time":"2025-06-30T15:18:36.785392996-04:00","level":"INFO","msg":"writer: Do: started","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:18:36.785397358-04:00","level":"INFO","msg":"handler: started","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:18:36.785405866-04:00","level":"INFO","msg":"sender: started","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:18:37.022406586-04:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-30T15:18:46.68524282-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T15:18:46.825097515-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T15:18:47.620583844-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T15:18:54.949558513-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T15:18:54.952639332-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T15:18:54.954742161-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T15:18:57.349578926-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T15:24:20.884489767-04:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-30T15:24:20.886702917-04:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-30T15:24:21.264026912-04:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-30T15:24:21.3941656-04:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-06-30T15:24:21.404235485-04:00","level":"INFO","msg":"stream: closing","id":"iyq1i94t"}
+{"time":"2025-06-30T15:24:21.404243394-04:00","level":"INFO","msg":"handler: closed","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:24:21.404247362-04:00","level":"INFO","msg":"writer: Close: closed","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:24:21.404251683-04:00","level":"INFO","msg":"sender: closed","stream_id":"iyq1i94t"}
+{"time":"2025-06-30T15:24:21.407010214-04:00","level":"INFO","msg":"stream: closed","id":"iyq1i94t"}

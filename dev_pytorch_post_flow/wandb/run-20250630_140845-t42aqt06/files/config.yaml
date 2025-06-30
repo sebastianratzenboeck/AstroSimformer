@@ -1,0 +1,111 @@
+_wandb:
+    value:
+        cli_version: 0.20.1
+        m: []
+        python_version: 3.13.5
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 13
+                - 16
+                - 55
+            "4": 3.13.5
+            "5": 0.20.1
+            "8":
+                - 1
+            "12": 0.20.1
+            "13": linux-x86_64
+attn_embed_dims:
+    value:
+        2mass_phot: 64
+        gaia_phot: 64
+        wise_phot: 64
+        xp: 64
+batch_size:
+    value: 1024
+dim_globals:
+    value:
+        2mass_phot: 20
+        gaia_phot: 20
+        wise_phot: 20
+        xp: 20
+dim_ids:
+    value:
+        2mass_phot: 20
+        gaia_phot: 20
+        wise_phot: 20
+        xp: 20
+dim_locals:
+    value:
+        2mass_phot: 8
+        gaia_phot: 8
+        wise_phot: 8
+        xp: 8
+dim_theta:
+    value: 5
+dim_values:
+    value:
+        2mass_phot: 20
+        gaia_phot: 20
+        wise_phot: 20
+        xp: 20
+dropout:
+    value: 0
+final_embed_dim:
+    value: 128
+final_num_heads:
+    value: 4
+final_num_layers:
+    value: 4
+final_widening:
+    value: 4
+flow_depth:
+    value: 2
+flow_hidden_dim:
+    value: 256
+lr:
+    value: 0.001
+modalities:
+    value:
+        - gaia_phot
+        - 2mass_phot
+        - wise_phot
+        - xp
+num_epochs:
+    value: 200
+num_heads:
+    value:
+        - gaia_phot
+        - 2mass_phot
+        - wise_phot
+        - xp
+num_layers:
+    value:
+        2mass_phot: 3
+        gaia_phot: 3
+        wise_phot: 3
+        xp: 3
+num_nodes:
+    value:
+        2mass_phot: 3
+        apogee: 7214
+        boss: 4000
+        gaia_phot: 4
+        lamost: 3825
+        wise_phot: 4
+        xp: 61
+project_name:
+    value: astro-simformer
+run_name:
+    value: multimodal_all_transformers_full_domain_adapt
+theta_embed_dim:
+    value: 32
+widening_factors:
+    value:
+        2mass_phot: 4
+        gaia_phot: 4
+        wise_phot: 4
+        xp: 4

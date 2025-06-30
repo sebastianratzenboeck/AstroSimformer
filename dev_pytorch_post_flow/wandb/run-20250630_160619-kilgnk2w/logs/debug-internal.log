@@ -1,0 +1,23 @@
+{"time":"2025-06-30T16:06:19.865873292-04:00","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"/n/home12/sratzenboeck/code/AstroSimformer/dev_pytorch_post_flow/wandb/run-20250630_160619-kilgnk2w/logs/debug-core.log"}
+{"time":"2025-06-30T16:06:20.091249507-04:00","level":"INFO","msg":"stream: created new stream","id":"kilgnk2w"}
+{"time":"2025-06-30T16:06:20.091264096-04:00","level":"INFO","msg":"stream: started","id":"kilgnk2w"}
+{"time":"2025-06-30T16:06:20.091271316-04:00","level":"INFO","msg":"writer: Do: started","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:06:20.091277946-04:00","level":"INFO","msg":"sender: started","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:06:20.091285258-04:00","level":"INFO","msg":"handler: started","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:06:20.305911379-04:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-30T16:06:25.609285143-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:06:25.737309859-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:06:38.574971638-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:06:38.69569613-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:06:44.425040269-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:06:44.493537996-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:07:52.697058075-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:07:52.764654866-04:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-30T16:07:52.764671159-04:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-30T16:07:53.205788276-04:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-30T16:07:53.310744507-04:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-06-30T16:07:53.317222351-04:00","level":"INFO","msg":"stream: closing","id":"kilgnk2w"}
+{"time":"2025-06-30T16:07:53.317229497-04:00","level":"INFO","msg":"handler: closed","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:07:53.317233596-04:00","level":"INFO","msg":"writer: Close: closed","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:07:53.317237165-04:00","level":"INFO","msg":"sender: closed","stream_id":"kilgnk2w"}
+{"time":"2025-06-30T16:07:53.319952537-04:00","level":"INFO","msg":"stream: closed","id":"kilgnk2w"}

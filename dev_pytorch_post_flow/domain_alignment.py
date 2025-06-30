@@ -83,8 +83,6 @@ class ModalityTransformer(nn.Module):
         agg = (x * pres).sum(dim=1) / pres.sum(dim=1).clamp(min=1.0)
         # return self.out_proj(agg)
         return self.out_proj(agg)
-    
-
 
 
 class MultiContextFlowModel(nn.Module):
@@ -137,30 +135,30 @@ class MultiContextFlowModel(nn.Module):
             for mod in modalities
         })
         # 2) Modality‐level tokenizer & transformer
-        # self.mod_tokenizer = ModalityTokenizer(
-        #     modalities    = modalities,
-        #     in_dims       = attn_embed_dims,  # input dims per slot
-        #     value_dim     = mod_value_dim,    # now taken from constructor
-        #     id_dim        = mod_id_dim,
-        #     local_dim     = mod_local_dim,
-        #     global_dim    = mod_global_dim,
-        #     out_embed_dim = final_embed_dim
-        # )
-        # self.mod_transformer = ModalityTransformer(
-        #     n_modalities    = len(modalities),
-        #     embed_dim       = final_embed_dim,
-        #     num_heads       = final_num_heads,
-        #     num_layers      = final_num_layers,
-        #     widening_factor = final_widening,
-        #     dropout         = dropout
-        # )
+        self.mod_tokenizer = ModalityTokenizer(
+            modalities    = modalities,
+            in_dims       = attn_embed_dims,  # input dims per slot
+            value_dim     = mod_value_dim,    # now taken from constructor
+            id_dim        = mod_id_dim,
+            local_dim     = mod_local_dim,
+            global_dim    = mod_global_dim,
+            out_embed_dim = final_embed_dim
+        )
+        self.mod_transformer = ModalityTransformer(
+            n_modalities    = len(modalities),
+            embed_dim       = final_embed_dim,
+            num_heads       = final_num_heads,
+            num_layers      = final_num_layers,
+            widening_factor = final_widening,
+            dropout         = dropout
+        )
 
         # 3) time + θ embed
         self.time_theta_embed = TimeThetaEmbed(dim_theta, theta_embed_dim)
 
         # 4) final flow network
-        # in_dim = final_embed_dim + theta_embed_dim
-        in_dim = sum(attn_embed_dims[mod] for mod in modalities) + theta_embed_dim
+        in_dim = final_embed_dim + theta_embed_dim
+        # in_dim = sum(attn_embed_dims[mod] for mod in modalities) + theta_embed_dim
         blocks = [ResidualBlock(flow_hidden_dim) for _ in range(flow_depth)]
         self.flow_net = nn.Sequential(
             nn.Linear(in_dim, flow_hidden_dim),
@@ -192,13 +190,13 @@ class MultiContextFlowModel(nn.Module):
             per_mod_embs[mod] = emb_all
             mod_mask.append(mask_all)
 
-        # mod_mask = torch.stack(mod_mask, dim=1)  # (B, #modalities)
+        mod_mask = torch.stack(mod_mask, dim=1)  # (B, #modalities)
         # b) tokenize & aggregate modalities
-        # slots = self.mod_tokenizer(per_mod_embs, mod_mask)  # (B, M, E)
-        # final_ctx = self.mod_transformer(slots, mod_mask)  # (B, E)
+        slots = self.mod_tokenizer(per_mod_embs, mod_mask)  # (B, M, E)
+        final_ctx = self.mod_transformer(slots, mod_mask)  # (B, E)
         
-        # Delete after, this is just a test
-        final_ctx = torch.cat([per_mod_embs[mod] for mod in self.modalities], dim=1)
+        # Delete after, this is just a test without the final transformer layer
+        # final_ctx = torch.cat([per_mod_embs[mod] for mod in self.modalities], dim=1)
         
         # c) time+θ embedding
         tt_emb = self.time_theta_embed(t, theta_t)  # (B, θ_emb_dim)
@@ -234,8 +232,14 @@ class DomainAdaptiveTrainer:
                  ot_w_final=1.0, # final‐context OT weight
                  ot_w_mod=1.0,   # per-modality OT weight
                  pair_weight=1.0,
-                 ot_blur = 0.05,
-                 ot_scaling = 0.5):
+                 warmup_steps=1000, # how many steps to ramp OT+pair from 0→full
+                 max_loss=10.0,
+                 clip_grad_norm=1.0,
+                 # Blur annealing schedule
+                 ot_blur_start=0.5, 
+                 ot_blur_end=0.05, 
+                 ot_blur_min=0.1,
+                 **geomloss_kwargs):
         self.model = model.to(device)
         self.opt = optimizer
         self.device = device
@@ -244,19 +248,37 @@ class DomainAdaptiveTrainer:
         self.ot_w_final = ot_w_final
         self.ot_w_mod = ot_w_mod
         self.pair_w = pair_weight
+        
+        # warm‐up + clamping + clipping
+        self.warmup_steps   = warmup_steps
+        self.max_loss       = max_loss
+        self.clip_grad_norm = clip_grad_norm
+        self.global_step    = 0
+        
         # Use GeomLoss SamplesLoss for Sinkhorn OT
-        self.ot_loss_fn = SamplesLoss(
-            loss      = "sinkhorn",  # entropic regularization
-            p         = 2,           # Wasserstein-2
-            blur      = ot_blur,     # entropy regularization parameter
-            scaling   = ot_scaling,
-            reach     = 2.0,         # “maximum meaningful distance” in your embedding space
-            diameter  = 2.0,         # same as reach here
-            truncate  = 100          # optional: cap # of Sinkhorn iterations
+        # OT loss
+        self.ot_blur_start = ot_blur_start
+        self.ot_blur_end = ot_blur_end
+        self.ot_blur_min = ot_blur_min
+
+        self.ot_loss_fn = SamplesLoss(backend="online", **geomloss_kwargs)
+        # 2) small final-context normalizer
+        self.layer_norm_final = nn.LayerNorm(
+            self.model.mod_transformer.out_proj.out_features
         )
         self.loss_fn = nn.MSELoss()
         self.dim_theta = model.flow_net[-1].out_features
 
+    def _update_blur(self, epoch):
+        # fraction of training completed
+        frac = epoch / max(1, self.num_epochs - 1)
+        # compute decay rate so that start→end over training
+        decay_rate = (self.ot_blur_end / self.ot_blur_start) ** frac
+        # exponential decay
+        new_blur = self.ot_blur_start * decay_rate
+        # clamp by minimum if desired
+        self.ot_loss_fn.blur = max(new_blur, self.ot_blur_min)
+        
     def sample_t(self, B):
         t = torch.rand(B, device=self.device)
         return t.pow(1/(1+self.tp_exp))
@@ -299,27 +321,43 @@ class DomainAdaptiveTrainer:
         v_pred, sim_embs, sim_final = self.model(t, theta_t, sim_clean, sim_ids, sim_mask)
         loss_flow = self.loss_fn(v_pred, true_v)
 
+        
+        # -------- DOMAIN ALIGNMENT ---------------
+        
         # 5) domain‐alignment OT loss between sim vs. real joint contexts
         # get per‐modality real embeddings
         with torch.no_grad():
             _, real_embs, real_final = self.model(t, theta_t, real_clean, real_ids, real_mask)
-
+            
+        # — now **clone & normalize** copies just for OT —
+        sim_embs_norm = {
+            mod: self.layer_norm_mod[mod](sim_embs[mod])
+            for mod in self.model.modalities
+        }
+        real_embs_norm = {
+            mod: self.layer_norm_mod[mod](real_embs[mod])
+            for mod in self.model.modalities
+        }
+        sim_final_norm = self.layer_norm_final(sim_final)
+        real_final_norm = self.layer_norm_final(real_final)
+    
         # 6) OT losses (per-modality + final)
+        # — compute Sinkhorn OT on the **normalized** vectors only —
         loss_mod_ot = 0.0
         active_mods = 0
         for mod in self.model.modalities:
             # boolean masks of shape (B,) indicating which samples actually have this modality
             present_sim = ~sim_mask[mod].all(dim=1)
             present_real = ~real_mask[mod].all(dim=1)
-            # only if *both* sim and real have at least one valid embedding
-            if present_sim.any() and present_real.any():
-                s = sim_embs[mod][present_sim]  # (B_sim, E_mod)
-                r = real_embs[mod][present_real]  # (B_real, E_mod)
+            if ps.any() and pr.any():
+                s = sim_embs_norm[mod][present_sim]
+                r = real_embs_norm[mod][present_real]
                 loss_mod_ot += self.ot_loss_fn(s, r)
                 active_mods += 1
         loss_mod_ot = loss_mod_ot / active_mods
-        # always include final‐context OT
-        # loss_final_ot = self.ot_loss_fn(sim_final, real_final)
+        # final‐context OT
+        loss_final_ot = self.ot_loss_fn(sim_final_norm, real_final_norm)
+        loss_final_ot = loss_final_ot.clamp(max=self.max_loss)
 
         # 7) Pairwise *final-level* constraint (only if provided)
         loss_pair = 0.0
@@ -329,36 +367,50 @@ class DomainAdaptiveTrainer:
             sp_clean, sp_ids, sp_mask = {},{},{}
             tp_clean, tp_ids, tp_mask = {},{},{}
             for mod in self.model.modalities:
-                sp_clean[mod], sp_ids[mod], sp_mask[mod] = \
-                    self.prepare_modality(x_sp[mod].to(self.device))
-                tp_clean[mod], tp_ids[mod], tp_mask[mod] = \
-                    self.prepare_modality(x_tp[mod].to(self.device))
+                sp_clean[mod], sp_ids[mod], sp_mask[mod] = self.prepare_modality(x_sp[mod].to(self.device))
+                tp_clean[mod], tp_ids[mod], tp_mask[mod] = self.prepare_modality(x_tp[mod].to(self.device))
             # **without** no_grad so gradients flow
             _, _, sp_final = self.model(t, theta_t, sp_clean, sp_ids, sp_mask)
             _, _, tp_final = self.model(t, theta_t, tp_clean, tp_ids, tp_mask)
             # Pair loss currently only on final context embedding
-            loss_pair = F.mse_loss(sp_final, tp_final)
+            # loss_pair = F.mse_loss(sp_final, tp_final).clamp(max=self.max_loss)
+            cos_sim = F.cosine_similarity(sp_final, tp_final, dim=-1)   # (B,)
+            loss_pair = (1.0 - cos_sim).mean()                         # scalar
+            # then still clamp if you like:
+            loss_pair = loss_pair.clamp(max=self.max_loss)
 
         # 8) Combine and step
         # total_loss = loss_flow + self.ot_w_mod * loss_mod_ot + self.ot_w_final * loss_final_ot + self.pair_w * loss_pair
-        total_loss = loss_flow #+ self.ot_w_mod * loss_mod_ot + self.pair_w * loss_pair
+        # total_loss = loss_flow + self.ot_w_final * loss_final_ot + self.pair_w * loss_pair
+        
+        # 7) ramp weights from 0→full over warmup_steps
+        ramp = min(1.0, self.global_step / float(self.warmup_steps))
+        w_ot = ramp * self.ot_w_final
+        w_pair = ramp * self.pair_w
+
+        total_loss = loss_flow + w_ot * loss_final_ot + w_pair * loss_pair
+
         # 9) only update in training mode
         if is_training:
             self.opt.zero_grad()
             total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
             self.opt.step()
+            self.global_step += 1
 
         return {
-            'total': total_loss.item(),
-            'flow':  loss_flow.item(),
-            # 'ot_mod': loss_mod_ot.item(),
-            # 'ot_final': loss_final_ot.item(),
-            # 'pair':  loss_pair.item(),
+            'total':     total_loss.item(),
+            'flow':      loss_flow.item(),
+            'ot_final':  loss_final_ot.item(),
+            'pair':      loss_pair.item(),
+            'ramp':      ramp,
         }
-
-    def train_epoch(self, train_loader: DataLoader):
+    
+    def train_epoch(self, train_loader: DataLoader, epoch):
+        self._update_blur(epoch)
         self.model.train()
-        stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        # stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        stats = {'total': 0., 'flow': 0., 'ot_final': 0., 'pair': 0, 'ramp': 0}
         n = 0
         for batch in train_loader:
             out = self.step(batch, is_training=True)
@@ -370,7 +422,8 @@ class DomainAdaptiveTrainer:
     def eval_epoch(self, val_loader: DataLoader):
         """Run a validation pass over val_loader."""
         self.model.eval()
-        stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        # stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        stats = {'total': 0., 'flow': 0., 'ot_final': 0., 'pair': 0, 'ramp': 0}
         n = 0
         with torch.no_grad():
             for batch in val_loader:

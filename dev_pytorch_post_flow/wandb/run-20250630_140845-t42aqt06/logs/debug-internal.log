@@ -1,0 +1,23 @@
+{"time":"2025-06-30T14:08:45.806651448-04:00","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"/n/home12/sratzenboeck/code/AstroSimformer/dev_pytorch_post_flow/wandb/run-20250630_140845-t42aqt06/logs/debug-core.log"}
+{"time":"2025-06-30T14:08:46.028754989-04:00","level":"INFO","msg":"stream: created new stream","id":"t42aqt06"}
+{"time":"2025-06-30T14:08:46.028774267-04:00","level":"INFO","msg":"stream: started","id":"t42aqt06"}
+{"time":"2025-06-30T14:08:46.028779758-04:00","level":"INFO","msg":"writer: Do: started","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:08:46.028788372-04:00","level":"INFO","msg":"handler: started","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:08:46.028795287-04:00","level":"INFO","msg":"sender: started","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:08:46.186594921-04:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-30T14:08:54.202948276-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T14:08:54.330393738-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T14:08:58.555977357-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T14:08:58.596406421-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T14:08:59.847649248-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T14:08:59.849606267-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T14:09:03.601389673-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T14:09:06.846959665-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T14:11:58.032161202-04:00","level":"INFO","msg":"stream: closing","id":"t42aqt06"}
+{"time":"2025-06-30T14:11:58.03220835-04:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-30T14:11:58.03428823-04:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-30T14:11:58.366462245-04:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-30T14:11:58.487644099-04:00","level":"INFO","msg":"handler: closed","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:11:58.487659316-04:00","level":"INFO","msg":"writer: Close: closed","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:11:58.487668587-04:00","level":"INFO","msg":"sender: closed","stream_id":"t42aqt06"}
+{"time":"2025-06-30T14:11:58.490564959-04:00","level":"INFO","msg":"stream: closed","id":"t42aqt06"}

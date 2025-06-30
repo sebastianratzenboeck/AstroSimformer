@@ -1,0 +1,31 @@
+{"time":"2025-06-30T16:53:41.757350985-04:00","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"/n/home12/sratzenboeck/code/AstroSimformer/dev_pytorch_post_flow/wandb/run-20250630_165341-n1y6y1oz/logs/debug-core.log"}
+{"time":"2025-06-30T16:53:41.975799773-04:00","level":"INFO","msg":"stream: created new stream","id":"n1y6y1oz"}
+{"time":"2025-06-30T16:53:41.975818172-04:00","level":"INFO","msg":"stream: started","id":"n1y6y1oz"}
+{"time":"2025-06-30T16:53:41.975826567-04:00","level":"INFO","msg":"writer: Do: started","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:53:41.975830553-04:00","level":"INFO","msg":"handler: started","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:53:41.975838369-04:00","level":"INFO","msg":"sender: started","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:53:42.151087689-04:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-30T16:55:16.16466768-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:55:17.717894878-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:55:29.599420535-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:55:29.647300621-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:55:41.02362145-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:55:47.445882009-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:55:48.405636636-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:55:48.433931626-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:57:16.935655822-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:57:17.076927564-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:57:17.716684833-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:57:17.745394989-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:57:19.416201364-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:57:19.418198289-04:00","level":"INFO","msg":"Resuming system monitor"}
+{"time":"2025-06-30T16:57:42.182724472-04:00","level":"INFO","msg":"Pausing system monitor"}
+{"time":"2025-06-30T16:57:42.223446767-04:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-30T16:57:42.223476838-04:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-30T16:57:42.717002456-04:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-30T16:57:42.866530101-04:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-06-30T16:57:42.873436891-04:00","level":"INFO","msg":"stream: closing","id":"n1y6y1oz"}
+{"time":"2025-06-30T16:57:42.873444175-04:00","level":"INFO","msg":"handler: closed","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:57:42.873448053-04:00","level":"INFO","msg":"writer: Close: closed","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:57:42.873453548-04:00","level":"INFO","msg":"sender: closed","stream_id":"n1y6y1oz"}
+{"time":"2025-06-30T16:57:42.876229208-04:00","level":"INFO","msg":"stream: closed","id":"n1y6y1oz"}

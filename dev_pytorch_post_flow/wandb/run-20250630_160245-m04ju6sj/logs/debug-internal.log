@@ -1,0 +1,16 @@
+{"time":"2025-06-30T16:02:46.128023139-04:00","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"/n/home12/sratzenboeck/code/AstroSimformer/dev_pytorch_post_flow/wandb/run-20250630_160245-m04ju6sj/logs/debug-core.log"}
+{"time":"2025-06-30T16:02:46.345081169-04:00","level":"INFO","msg":"stream: created new stream","id":"m04ju6sj"}
+{"time":"2025-06-30T16:02:46.345099673-04:00","level":"INFO","msg":"stream: started","id":"m04ju6sj"}
+{"time":"2025-06-30T16:02:46.345106427-04:00","level":"INFO","msg":"writer: Do: started","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:02:46.345111537-04:00","level":"INFO","msg":"sender: started","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:02:46.345121332-04:00","level":"INFO","msg":"handler: started","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:02:46.521975598-04:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-06-30T16:06:19.242412491-04:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-06-30T16:06:19.244598747-04:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-06-30T16:06:19.692475216-04:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-06-30T16:06:19.804544706-04:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-06-30T16:06:19.811232471-04:00","level":"INFO","msg":"stream: closing","id":"m04ju6sj"}
+{"time":"2025-06-30T16:06:19.811240129-04:00","level":"INFO","msg":"handler: closed","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:06:19.811244344-04:00","level":"INFO","msg":"writer: Close: closed","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:06:19.811248263-04:00","level":"INFO","msg":"sender: closed","stream_id":"m04ju6sj"}
+{"time":"2025-06-30T16:06:19.814084836-04:00","level":"INFO","msg":"stream: closed","id":"m04ju6sj"}
