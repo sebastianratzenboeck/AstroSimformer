@@ -326,9 +326,7 @@ class DomainAdaptiveTrainer:
         v_pred, sim_embs, sim_final = self.model(t, theta_t, sim_clean, sim_ids, sim_mask)
         loss_flow = self.loss_fn(v_pred, true_v)
 
-        
         # -------- DOMAIN ALIGNMENT ---------------
-        
         # 5) domain‐alignment OT loss between sim vs. real joint contexts
         # get per‐modality real embeddings
         with torch.no_grad():
@@ -362,7 +360,8 @@ class DomainAdaptiveTrainer:
         loss_mod_ot = loss_mod_ot / active_mods
         # final‐context OT
         loss_final_ot = self.ot_loss_fn(sim_final_norm, real_final_norm)
-        loss_final_ot = loss_final_ot.clamp(max=self.max_loss)
+        # loss_final_ot = loss_final_ot.clamp(max=self.max_loss)
+        loss_final_ot = torch.log1p(loss_final_ot)
 
         # 7) Pairwise *final-level* constraint (only if provided)
         loss_pair = 0.0
@@ -382,7 +381,8 @@ class DomainAdaptiveTrainer:
             cos_sim = F.cosine_similarity(sp_final, tp_final, dim=-1)   # (B,)
             loss_pair = (1.0 - cos_sim).mean()                         # scalar
             # then still clamp if you like:
-            loss_pair = loss_pair.clamp(max=self.max_loss)
+            # loss_pair = loss_pair.clamp(max=self.max_loss)
+            loss_pair = torch.log1p(loss_pair)   # Soft‐clamping of loss -> still differentiable
 
         # 8) Combine and step
         # total_loss = loss_flow + self.ot_w_mod * loss_mod_ot + self.ot_w_final * loss_final_ot + self.pair_w * loss_pair
