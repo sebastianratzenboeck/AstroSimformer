@@ -72,6 +72,8 @@ class ModalityTransformer(nn.Module):
             for _ in range(num_layers)
         ])
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+        # normalize so that OT sees well‐conditioned distances
+        # self.layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(self, slots, mod_mask):
         # slots:(B,M,E), mod_mask:(B,M)
@@ -81,10 +83,8 @@ class ModalityTransformer(nn.Module):
             x = blk(x, attn_mask)
         pres = (~mod_mask).float().unsqueeze(-1)
         agg = (x * pres).sum(dim=1) / pres.sum(dim=1).clamp(min=1.0)
-        # return self.out_proj(agg)
         return self.out_proj(agg)
-    
-
+        # return self.layer_norm(z)  # (B,E)
 
 
 class MultiContextFlowModel(nn.Module):
@@ -137,30 +137,29 @@ class MultiContextFlowModel(nn.Module):
             for mod in modalities
         })
         # 2) Modality‐level tokenizer & transformer
-        # self.mod_tokenizer = ModalityTokenizer(
-        #     modalities    = modalities,
-        #     in_dims       = attn_embed_dims,  # input dims per slot
-        #     value_dim     = mod_value_dim,    # now taken from constructor
-        #     id_dim        = mod_id_dim,
-        #     local_dim     = mod_local_dim,
-        #     global_dim    = mod_global_dim,
-        #     out_embed_dim = final_embed_dim
-        # )
-        # self.mod_transformer = ModalityTransformer(
-        #     n_modalities    = len(modalities),
-        #     embed_dim       = final_embed_dim,
-        #     num_heads       = final_num_heads,
-        #     num_layers      = final_num_layers,
-        #     widening_factor = final_widening,
-        #     dropout         = dropout
-        # )
+        self.mod_tokenizer = ModalityTokenizer(
+            modalities    = modalities,
+            in_dims       = attn_embed_dims,  # input dims per slot
+            value_dim     = mod_value_dim,    # now taken from constructor
+            id_dim        = mod_id_dim,
+            local_dim     = mod_local_dim,
+            global_dim    = mod_global_dim,
+            out_embed_dim = final_embed_dim
+        )
+        self.mod_transformer = ModalityTransformer(
+            n_modalities    = len(modalities),
+            embed_dim       = final_embed_dim,
+            num_heads       = final_num_heads,
+            num_layers      = final_num_layers,
+            widening_factor = final_widening,
+            dropout         = dropout
+        )
 
         # 3) time + θ embed
         self.time_theta_embed = TimeThetaEmbed(dim_theta, theta_embed_dim)
 
         # 4) final flow network
-        # in_dim = final_embed_dim + theta_embed_dim
-        in_dim = sum(attn_embed_dims[mod] for mod in modalities) + theta_embed_dim
+        in_dim = final_embed_dim + theta_embed_dim
         blocks = [ResidualBlock(flow_hidden_dim) for _ in range(flow_depth)]
         self.flow_net = nn.Sequential(
             nn.Linear(in_dim, flow_hidden_dim),
@@ -192,13 +191,10 @@ class MultiContextFlowModel(nn.Module):
             per_mod_embs[mod] = emb_all
             mod_mask.append(mask_all)
 
-        # mod_mask = torch.stack(mod_mask, dim=1)  # (B, #modalities)
+        mod_mask = torch.stack(mod_mask, dim=1)  # (B, #modalities)
         # b) tokenize & aggregate modalities
-        # slots = self.mod_tokenizer(per_mod_embs, mod_mask)  # (B, M, E)
-        # final_ctx = self.mod_transformer(slots, mod_mask)  # (B, E)
-        
-        # Delete after, this is just a test
-        final_ctx = torch.cat([per_mod_embs[mod] for mod in self.modalities], dim=1)
+        slots = self.mod_tokenizer(per_mod_embs, mod_mask)  # (B, M, E)
+        final_ctx = self.mod_transformer(slots, mod_mask)  # (B, E)
         
         # c) time+θ embedding
         tt_emb = self.time_theta_embed(t, theta_t)  # (B, θ_emb_dim)
@@ -319,7 +315,7 @@ class DomainAdaptiveTrainer:
                 active_mods += 1
         loss_mod_ot = loss_mod_ot / active_mods
         # always include final‐context OT
-        # loss_final_ot = self.ot_loss_fn(sim_final, real_final)
+        loss_final_ot = self.ot_loss_fn(sim_final, real_final)
 
         # 7) Pairwise *final-level* constraint (only if provided)
         loss_pair = 0.0
@@ -340,8 +336,7 @@ class DomainAdaptiveTrainer:
             loss_pair = F.mse_loss(sp_final, tp_final)
 
         # 8) Combine and step
-        # total_loss = loss_flow + self.ot_w_mod * loss_mod_ot + self.ot_w_final * loss_final_ot + self.pair_w * loss_pair
-        total_loss = loss_flow #+ self.ot_w_mod * loss_mod_ot + self.pair_w * loss_pair
+        total_loss = loss_flow + self.ot_w_mod * loss_mod_ot + self.ot_w_final * loss_final_ot + self.pair_w * loss_pair
         # 9) only update in training mode
         if is_training:
             self.opt.zero_grad()
@@ -351,14 +346,14 @@ class DomainAdaptiveTrainer:
         return {
             'total': total_loss.item(),
             'flow':  loss_flow.item(),
-            # 'ot_mod': loss_mod_ot.item(),
-            # 'ot_final': loss_final_ot.item(),
-            # 'pair':  loss_pair.item(),
+            'ot_mod': loss_mod_ot.item(),
+            'ot_final': loss_final_ot.item(),
+            'pair':  loss_pair.item(),
         }
 
     def train_epoch(self, train_loader: DataLoader):
         self.model.train()
-        stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        stats = {'total': 0., 'flow': 0., 'ot_mod': 0., 'ot_final': 0, 'pair': 0}
         n = 0
         for batch in train_loader:
             out = self.step(batch, is_training=True)
@@ -370,7 +365,7 @@ class DomainAdaptiveTrainer:
     def eval_epoch(self, val_loader: DataLoader):
         """Run a validation pass over val_loader."""
         self.model.eval()
-        stats = {'total': 0., 'flow': 0.} #, 'ot_mod': 0., 'pair': 0}
+        stats = {'total': 0., 'flow': 0., 'ot_mod': 0., 'ot_final': 0, 'pair': 0}
         n = 0
         with torch.no_grad():
             for batch in val_loader:

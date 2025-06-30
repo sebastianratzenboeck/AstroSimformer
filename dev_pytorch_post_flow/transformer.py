@@ -75,6 +75,8 @@ class MaskedMultiheadAttention(nn.Module):
             # Ensure float mask with -inf where attention is blocked
             # attn_mask --> ~attn_mask, so False becomes True (1) = blocked, True -> False (0) = allowed
             float_mask = (~attn_mask).float() * -1e30  # Now: True = -1e30, False = 0
+            # ensure it’s on the same device as x
+            float_mask = float_mask.to(x.device)
             # Expand to all attention heads, shape must be: (B * num_heads, N, N)
             float_mask = float_mask.repeat_interleave(self.num_heads, dim=0)
             x_out, _ = self.attn(x, x, x, attn_mask=float_mask)

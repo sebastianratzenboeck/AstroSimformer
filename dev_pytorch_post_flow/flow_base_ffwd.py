@@ -42,73 +42,47 @@ class TimeThetaEmbed(nn.Module):
         return self.theta_emb(inp)  # (B, embed_dim)
 
 
-def edge_mask_from_marginal(marginal_mask):
-    B, M = marginal_mask.shape
-    device = marginal_mask.device
-    edge_mask = torch.ones((B, M, M), dtype=torch.bool, device=device)
-    for row, ei in zip(marginal_mask, edge_mask):
-        ei[row.bool()] = False
-        ei[:, row.bool()] = False
-    return edge_mask
-
-
-class ContextTransformer(nn.Module):
-    def __init__(self,
-                 num_nodes,  # Number of nodes (i.e., variables/features) in x
-                 # Tokenizer parameters
-                 dim_value,  # Dimension of the value embedding
-                 dim_id,  # Dimension of the node ID embedding
-                 dim_local, dim_global,  # Dimension of the marginal info embedding
-                 # Attention embedding dimension
-                 attn_embed_dim, # Dimension of the attention embedding
-                 num_heads,      # Number of attention heads
-                 num_layers,     # Number of transformer layers
-                 widening_factor=4,  # Widening factor for feedforward layers
-                 dropout=0.1):
+class ContextFeedForward(nn.Module):
+    def __init__(self, 
+                 num_nodes,        # M
+                 mlp_hidden_dim=256,
+                 out_dim=128):
         super().__init__()
-        self.tokenizer = Tokenizer(num_nodes, dim_value, dim_id, dim_local, dim_global, attn_embed_dim)
-        self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(attn_embed_dim, num_heads, widening_factor=widening_factor, dropout_rate=dropout)
-            for _ in range(num_layers)
-        ])
-        # Project the pooled embedding (if you want to change its size, you can tweak in/out dims here)
-        self.output_layer = nn.Linear(attn_embed_dim, attn_embed_dim)
-        # normalize so that OT sees well‐conditioned distances
-        # self.layer_norm = nn.LayerNorm(attn_embed_dim)
+        # a single MLP that takes in the *mean* (or sum, or max) of your raw inputs
+        self.mlp = nn.Sequential(
+            nn.Linear(num_nodes, mlp_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(mlp_hidden_dim, out_dim),
+            nn.LayerNorm(out_dim),
+        )
 
-    def forward(self, x, node_ids, marginal_mask):
-        edge_mask = edge_mask_from_marginal(marginal_mask)
-        tokens = self.tokenizer(x, node_ids, marginal_mask)
-        for block in self.transformer_blocks:
-            tokens = block(tokens, edge_mask)
-        # Mean pooling, helps towards permutation-invariant aggregator
-        ctx = tokens.mean(dim=1)
-        # final projection → still (B, E)
-        return self.output_layer(ctx)
-        # z = self.output_layer(ctx)
-        # return self.layer_norm(z)
-
+    def forward(self, x):
+        # x: (B, M)  — ignoring node_ids & mask entirely
+        # you could do any pooling or just feed the raw M vector in:
+        return self.mlp(x)
+    
 class ContinuousFlowModel(nn.Module):
     def __init__(self,
                  num_nodes,   # Number of nodes (i.e., variables/features) in x
                  dim_theta,   # Dimension of the theta vector
                  # Tokenizer parameters
-                 dim_value, dim_id, dim_local, dim_global,
-                 attn_embed_dim, num_heads, num_layers, widening_factor, dropout,
+                 x_hidden_dim,
+                 x_embed_dim,
                  # theta+t embedding parameters,
                  theta_embed_dim,
                  # Flow network parameters
                  flow_hidden_dim, flow_depth):
         super().__init__()
         # context transformer for x
-        self.context_net = ContextTransformer(
-            num_nodes, dim_value, dim_id, dim_local, dim_global,
-            attn_embed_dim, num_heads, num_layers, widening_factor, dropout
+        self.context_net = ContextFeedForward(
+            num_nodes=num_nodes,
+            mlp_hidden_dim=x_hidden_dim,
+            out_dim=x_embed_dim
         )
         # embed time+theta jointly
         self.time_theta_embed = TimeThetaEmbed(dim_theta, theta_embed_dim)
         # flow network now takes [ctx output = num_nodes, t+theta embed]
-        in_dim = attn_embed_dim + theta_embed_dim  # context embedding + time+theta embedding
+        in_dim = x_embed_dim + theta_embed_dim  # context embedding + time+theta embedding
         layers = [ResidualBlock(flow_hidden_dim) for _ in range(flow_depth)]
         self.flow_net = nn.Sequential(
             nn.Linear(in_dim, flow_hidden_dim),
@@ -120,7 +94,7 @@ class ContinuousFlowModel(nn.Module):
     def forward(self, t, theta_t, x, node_ids, mask):
         # t: (B,), theta_t: (B, dim_theta)
         # x, node_ids, mask: (B, M)
-        ctx_emb = self.context_net(x, node_ids, mask)         # (B, E)
+        ctx_emb = self.context_net(x)         # (B, E)
         tt_emb = self.time_theta_embed(t, theta_t)            # (B, E)
         h = torch.cat([ctx_emb, tt_emb], dim=-1)      # (B, 2E)
         return self.flow_net(h)                               # (B, dim_theta)

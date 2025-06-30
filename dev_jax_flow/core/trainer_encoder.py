@@ -19,8 +19,22 @@ def make_autoencoder(in_dim, hidden_dim):
     return hk.without_apply_rng(hk.transform(forward))
 
 
+<<<<<<< Updated upstream
 def encode_batch_fn(batch, encode_mask, encoder_apply, encoder_params):
     x_encoded = batch[:, encode_mask, :]
+=======
+def blend_stop_gradient(z, alpha):
+    return jax.lax.stop_gradient(z) * (1 - alpha) + z * alpha
+
+def smooth_freeze_schedule(epoch, freeze_epoch=10, sharpness=2.0):
+    alpha = 1 / (1 + jnp.exp((epoch - freeze_epoch) * sharpness)) 
+    print(f'Current alpha={alpha}')
+    return alpha
+
+
+def encode_batch_fn(batch, encode_mask, encoder_apply, encoder_params, alpha):
+    x_encoded = batch[:, encode_mask]
+>>>>>>> Stashed changes
     if x_encoded.ndim == 3 and x_encoded.shape[-1] == 1:
         x_encoded = x_encoded[..., 0]
     x_pass = batch[:, ~encode_mask, :]
@@ -106,7 +120,12 @@ class TrainFlowModel:
             batch_raw,
             self.encode_mask,
             self.encoder_fn.apply,
+<<<<<<< Updated upstream
             encoder_params
+=======
+            self.encoder_params,
+            smooth_freeze_schedule(self.current_epoch, 40, 0.25)
+>>>>>>> Stashed changes
         )
         batch_xs_clean = batch_xs.copy()
         rng_time, rng_sample, rng_data, rng_condition, rng_edge_mask1, rng_edge_mask2 = jax.random.split(key, 6)

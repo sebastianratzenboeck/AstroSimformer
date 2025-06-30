@@ -103,13 +103,51 @@ def get_train_val_loader(
         train_loader, val_loader: DataLoaders for training and validation.
     """
     # 1) convert DataFrames to tensors
-    x_s_dict = {mod: torch.from_numpy(df_sim[input_cols[mod]].values).float() for mod in modalities}  # simulated source data
-    theta_s = torch.from_numpy(df_sim[feats_theta].values).float()  # simulated source theta
-    x_t_dict = {mod: torch.from_numpy(df_real[input_cols[mod]].values).float() for mod in modalities}  # real target data
+    x_s_dict = {mod: df_sim[input_cols[mod]].values for mod in modalities}  # simulated source data
+    theta_s = df_sim[feats_theta].values  # simulated source theta
+    x_t_dict = {mod: df_real[input_cols[mod]].values for mod in modalities}  # real target data
     # Pair wise data
-    x_sp_dict = {mod: torch.from_numpy(df_sim_pair[input_cols[mod]].values).float() for mod in modalities}
-    x_tp_dict = {mod: torch.from_numpy(df_real_pair[input_cols[mod]].values).float() for mod in modalities}
+    x_sp_dict = {mod: df_sim_pair[input_cols[mod]].values for mod in modalities}
+    x_tp_dict = {mod: df_real_pair[input_cols[mod]].values for mod in modalities}
 
+    normalization_info = {}
+    sim_data_normed = {}
+    real_data_normed = {}
+    pair_data_normed = {}
+    spec_cols = kwargs.pop('spec_cols', ['xp', 'apogee', 'lamost', 'boss'])
+    for mod in x_s_dict.keys():
+        if mod.lower() in spec_cols:
+            # Log normalization for spectra and normalize over entire spectra not per pixel
+            log_mean_val = np.nanmean(np.log10(x_s_dict[mod]))
+            log_std_val = np.nanstd(np.log10(x_s_dict[mod]))
+            # Normalize values
+            sim_mod_normed = (np.log10(x_s_dict[mod]) - log_mean_val) / log_std_val
+            real_mod_normed = (np.log10(x_t_dict[mod]) - log_mean_val) / log_std_val
+            pair_sim_mod_normed = (np.log10(x_sp_dict[mod]) - log_mean_val) / log_std_val
+            pair_real_mod_normed = (np.log10(x_tp_dict[mod]) - log_mean_val) / log_std_val
+            normalization_info[mod] = {'mean': log_mean_val, 'std': log_std_val, 'log': True}
+        else:
+            mean_val = np.nanmean(x_s_dict[mod], axis=0)
+            std_val = np.nanstd(x_s_dict[mod], axis=0)
+            
+            sim_mod_normed = (x_s_dict[mod] - mean_val) / std_val
+            real_mod_normed = (x_t_dict[mod] - mean_val) / std_val
+            pair_sim_mod_normed = (x_sp_dict[mod] - mean_val) / std_val
+            pair_real_mod_normed = (x_tp_dict[mod] - mean_val) / std_val
+            normalization_info[mod] = {'mean': mean_val, 'std': std_val, 'log': False}
+
+        # Set
+        x_s_dict[mod] = torch.from_numpy(sim_mod_normed).float()
+        x_t_dict[mod] = torch.from_numpy(real_mod_normed).float()
+        x_sp_dict[mod] = torch.from_numpy(pair_sim_mod_normed).float()
+        x_tp_dict[mod] = torch.from_numpy(pair_real_mod_normed).float()
+    
+    mean_theta = np.nanmean(theta_s, axis=0)
+    std_theta = np.nanstd(theta_s, axis=0)
+    theta_s = torch.from_numpy((theta_s - mean_theta) / std_theta).float()
+    normalization_info['theta'] = {'mean': mean_theta, 'std': std_theta, 'log': False}
+    
+    
     # 2) split source
     N_s = theta_s.shape[0]
     idx_s = np.random.permutation(N_s)
@@ -165,4 +203,4 @@ def get_train_val_loader(
     # 7) DataLoaders
     train_loader = DataLoader(train_ds, **kwargs)
     val_loader = DataLoader(val_ds, **kwargs)
-    return train_loader, val_loader
+    return train_loader, val_loader, normalization_info
