@@ -56,7 +56,6 @@ def main(train_loader, val_loader, config):
         ot_w_mod=config['ot_w_mod'],  # per-modality OT weight
         pair_weight=config['pair_weight'],
         warmup_steps=config['warmup_steps'],  # how many steps to ramp OT+pair from 0→full
-        max_loss=config['max_loss'],
         clip_grad_norm=config['clip_grad_norm'],
         ot_blur_start=config['ot_blur_start'],
         ot_blur_end=config['ot_blur_end'],
@@ -196,15 +195,15 @@ if __name__ == "__main__":
     # 3) ContextTransformer hyperparams
     dim_values = {
         **{mod: 20 for mod in photometric_mods},  # small value‐embed
-        **{mod: 20 for mod in spectral_mods}  # richer embedding for spectra
+        **{mod: 20 for mod in spectral_mods}      # possibly richer embedding for spectra
     }
     dim_ids = {mod: 20 for mod in modalities}
     dim_locals = {mod: 8 for mod in modalities}
     dim_globals = {mod: 20 for mod in modalities}
     # 4) Attention / Transformer sizes
     attn_embed_dims = {
-        **{mod: 64 for mod in photometric_mods},  # lightweight for photometry
-        **{mod: 64 for mod in spectral_mods}  # more capacity for spectra
+        **{mod: 32 for mod in photometric_mods},   # lightweight for photometry
+        **{mod: 128 for mod in spectral_mods}      # more capacity for spectra
     }
     num_heads = {
         **{mod: 4 for mod in photometric_mods},
@@ -261,7 +260,6 @@ if __name__ == "__main__":
         ot_w_mod        = 0,      # per-modality OT weight
         pair_weight     = 0.1,    # Pair weight
         warmup_steps    = 30_000, # how many steps to ramp OT+pair from 0→full
-        max_loss        = 10.0,
         clip_grad_norm  = 1.0,
         ot_blur_start   = 1.0,
         ot_blur_end     = 0.1,

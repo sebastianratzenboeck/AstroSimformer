@@ -233,7 +233,6 @@ class DomainAdaptiveTrainer:
                  ot_w_mod=1.0,   # per-modality OT weight
                  pair_weight=1.0,
                  warmup_steps=1000, # how many steps to ramp OT+pair from 0→full
-                 max_loss=10.0,
                  clip_grad_norm=1.0,
                  # Blur annealing schedule
                  ot_blur_start=0.5, 
@@ -251,7 +250,6 @@ class DomainAdaptiveTrainer:
         
         # warm‐up + clamping + clipping
         self.warmup_steps   = warmup_steps
-        self.max_loss       = max_loss
         self.clip_grad_norm = clip_grad_norm
         self.global_step    = 0
         
@@ -360,7 +358,6 @@ class DomainAdaptiveTrainer:
         loss_mod_ot = loss_mod_ot / active_mods
         # final‐context OT
         loss_final_ot = self.ot_loss_fn(sim_final_norm, real_final_norm)
-        # loss_final_ot = loss_final_ot.clamp(max=self.max_loss)
         loss_final_ot = torch.log1p(loss_final_ot)
 
         # 7) Pairwise *final-level* constraint (only if provided)
@@ -377,7 +374,6 @@ class DomainAdaptiveTrainer:
             _, _, sp_final = self.model(t, theta_t, sp_clean, sp_ids, sp_mask)
             _, _, tp_final = self.model(t, theta_t, tp_clean, tp_ids, tp_mask)
             # Pair loss currently only on final context embedding
-            # loss_pair = F.mse_loss(sp_final, tp_final).clamp(max=self.max_loss)
             cos_sim = F.cosine_similarity(sp_final, tp_final, dim=-1)   # (B,)
             loss_pair = (1.0 - cos_sim).mean()                         # scalar
             # then still clamp if you like:
