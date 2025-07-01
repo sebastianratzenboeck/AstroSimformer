@@ -1,16 +1,5 @@
 {
     "SimformerConfig": {
-<<<<<<< Updated upstream
-        "dim_value": 5,
-        "dim_id": 5,
-        "dim_condition": 3
-    },
-    "TransformerConfig": {
-        "num_heads": 2,
-        "num_layers": 3,
-        "attn_size": 10,
-        "widening_factor": 3
-=======
         "dim_value": 20,
         "dim_id": 20,
         "dim_condition": 10
@@ -20,7 +9,6 @@
         "num_layers": 3,
         "attn_size": 32,
         "widening_factor": 8
->>>>>>> Stashed changes
     },
     "TrainingConfig": {
         "epochs": 1000
