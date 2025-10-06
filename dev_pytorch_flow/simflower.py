@@ -125,51 +125,165 @@ class FlowMatchingTrainer:
         return self.model
 
 
+class BlockFlowMatchingTrainer(FlowMatchingTrainer):
+    """
+    Extension of FlowMatchingTrainer that supports block-wise conditioning and masking.
 
-# def physics_guided_flow_loss(model, decoder, x0, x1, node_ids,
-#                              condition_mask, edge_mask,
-#                              batch_index, lambda0=0.05, tau=0.2):
-#     """
-#     model: predicts velocity v_theta(t, xt, ...).
-#     decoder: PhysicsDecoder instance (differentiable).
-#     batch_index: list[int] mapping batch items to per-sample K/y/sigma/mask.
-#     """
-#     B, N = x0.shape
-#     t = torch.rand(B, device=x0.device)             # ~ U(0,1)
-#     t = t.pow(1.0)                                  # you can bias if you like
-#     t_in = t.view(B,1,1)
-#
-#     # linear blend + conditioning, your original logic:
-#     xt = (1 - (1 - model.sigma_min) * t_in) * x0.unsqueeze(-1) + t_in * x1.unsqueeze(-1)
-#     xt = torch.where(condition_mask.bool(), x1.unsqueeze(-1), xt)
-#     xt = xt.squeeze(-1)                             # (B,N)
-#
-#     # predict velocity
-#     v = model(t, xt, node_ids, condition_mask, edge_mask).squeeze(-1)   # (B,N)
-#
-#     # --- physics guidance on the one-step terminal estimate ---
-#     x1_pred = xt + (1.0 - t.view(B,1)) * v         # (B,N)
-#
-#     # unpack tokens: you decide index layout once and keep it fixed
-#     # e.g., c: [:M], alpha: [M], Av:[M+1], logd:[M+2]
-#     M = model.num_coeffs
-#     c, alpha_star, Av, logd = (x1_pred[:,:M], x1_pred[:,M], x1_pred[:,M+1], x1_pred[:,M+2])
-#
-#     # positivity via softplus on Av if you keep Av unconstrained as token
-#     Av_phys = torch.nn.functional.softplus(Av)
-#
-#     # physics NLL per sample
-#     nll = decoder(c, alpha_star, Av_phys, logd, batch_index)  # (B,)
-#     J = nll.mean()
-#
-#     # gradient wrt x1_pred
-#     grads = torch.autograd.grad(J, x1_pred, retain_graph=False, create_graph=False)[0]
-#     # precondition / schedule
-#     lam_t = (lambda0 * t / (t + tau)).view(B,1)
-#     g_t = - lam_t * grads
-#
-#     # corrected velocity and FM loss
-#     v_tilde = v + g_t
-#     u_target = x1 - (1 - model.sigma_min) * x0     # target velocity
-#     loss_fm = ((v_tilde - u_target)**2).mean()
-#     return loss_fm
+    Variables are grouped into blocks, and all variables in a block are always
+    conditioned or dropped together in the edge mask.
+
+    Args:
+        block_dict: Dictionary mapping block names (str) to lists of column indices (list[int]).
+                   Example: {'demographics': [0, 1, 2], 'vitals': [3, 4], 'labs': [5, 6, 7, 8]}
+        All other arguments are inherited from FlowMatchingTrainer.
+    """
+    def __init__(
+            self,
+            model,
+            data,
+            block_dict,
+            batch_size=128,
+            lr=1e-3,
+            sigma_min=0.001,
+            time_prior_exponent=1.0,
+            inner_train_loop_size=1000,
+            early_stopping_patience=20,
+            device="cuda" if torch.cuda.is_available() else "cpu"
+    ):
+        # Validate and store block information before calling super().__init__
+        self.block_dict = block_dict
+        self._validate_blocks(data)
+
+        # Call parent constructor
+        super().__init__(
+            model=model,
+            data=data,
+            batch_size=batch_size,
+            lr=lr,
+            sigma_min=sigma_min,
+            time_prior_exponent=time_prior_exponent,
+            inner_train_loop_size=inner_train_loop_size,
+            early_stopping_patience=early_stopping_patience,
+            device=device
+        )
+
+        # Create block-to-indices mapping on device
+        self.block_names = list(block_dict.keys())
+        self.num_blocks = len(self.block_names)
+
+        # Store indices for each block as a list of tensors
+        self.block_indices = [
+            torch.tensor(block_dict[name], dtype=torch.long, device=device)
+            for name in self.block_names
+        ]
+
+    def _validate_blocks(self, data):
+        """Validate that block_dict is well-formed and covers all columns."""
+        if not isinstance(self.block_dict, dict):
+            raise ValueError("block_dict must be a dictionary")
+
+        if not self.block_dict:
+            raise ValueError("block_dict cannot be empty")
+
+        # Check that all values are lists
+        for name, indices in self.block_dict.items():
+            if not isinstance(indices, list):
+                raise ValueError(f"Block '{name}' must map to a list of column indices")
+            if not indices:
+                raise ValueError(f"Block '{name}' cannot be empty")
+            if not all(isinstance(i, int) for i in indices):
+                raise ValueError(f"Block '{name}' must contain only integer indices")
+
+        # Get all indices and check for overlaps
+        all_indices = []
+        for indices in self.block_dict.values():
+            all_indices.extend(indices)
+
+        if len(all_indices) != len(set(all_indices)):
+            raise ValueError("Blocks contain overlapping column indices")
+
+        # Check that indices match data dimensions
+        num_cols = data.shape[1]
+        if set(all_indices) != set(range(num_cols)):
+            raise ValueError(
+                f"Block indices must cover all columns [0, {num_cols-1}]. "
+                f"Got: {sorted(set(all_indices))}"
+            )
+
+    def build_condition_mask(self, prob=0.333):
+        """
+        Build condition mask where entire blocks are conditioned together.
+
+        Args:
+            prob: Probability that each block is conditioned (not the individual variables).
+
+        Returns:
+            mask: (batch_size, num_nodes, 1) float tensor
+        """
+        # Initialize mask
+        mask = torch.zeros((self.batch_size, self.num_nodes), dtype=torch.bool, device=self.device)
+
+        # For each sample in batch, decide which blocks to condition
+        for b in range(self.batch_size):
+            # Sample which blocks are conditioned for this batch item
+            block_mask = torch.bernoulli(torch.full((self.num_blocks,), prob, device=self.device)).bool()
+
+            # Set all variables in conditioned blocks to True
+            for block_idx, is_conditioned in enumerate(block_mask):
+                if is_conditioned:
+                    mask[b, self.block_indices[block_idx]] = True
+
+        # Ensure not all variables are conditioned (prevent all-true)
+        all_true = mask.all(dim=1, keepdim=True)
+        mask = mask & ~all_true
+
+        return mask.unsqueeze(-1).float()
+
+    def build_edge_mask(self, dense_ratio=0.7):
+        """
+        Build edge mask where entire blocks are dropped together.
+
+        Args:
+            dense_ratio: Ratio of samples in batch with dense (all edges) masks.
+
+        Returns:
+            masks: (batch_size, num_nodes, num_nodes) bool tensor
+        """
+        n_dense = int(self.batch_size * dense_ratio)
+
+        # Dense masks (all edges present)
+        dense = torch.ones((n_dense, self.num_nodes, self.num_nodes), dtype=torch.bool)
+
+        # Sparse masks (some blocks dropped)
+        sparse = []
+        for _ in range(self.batch_size - n_dense):
+            m = torch.ones((self.num_nodes, self.num_nodes), dtype=torch.bool)
+
+            # For each block, decide if it should be dropped
+            for block_indices in self.block_indices:
+                if torch.rand(1).item() < 0.2:  # 20% chance to drop a block
+                    # Convert to CPU for indexing, then back to original device
+                    block_indices_cpu = block_indices.cpu()
+
+                    # Drop edges involving this block
+                    m[block_indices_cpu, :] = False
+                    m[:, block_indices_cpu] = False
+
+                    # Ensure self-loops within the block are True (diagonal elements)
+                    for idx in block_indices_cpu:
+                        m[idx, idx] = True
+
+            sparse.append(m)
+
+        # Combine dense and sparse masks
+        if sparse:
+            sparse = torch.stack(sparse, dim=0)
+            masks = torch.cat([dense, sparse], dim=0)
+        else:
+            masks = dense
+
+        # Shuffle the masks
+        indices = torch.randint(0, masks.shape[0], (self.batch_size,))
+        return masks[indices].to(self.device)
+
+

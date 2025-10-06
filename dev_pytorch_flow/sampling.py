@@ -62,5 +62,9 @@ def sample_batched_flow(
     for t in ts[:-1]:
         dx = velocity_fn(t, x_flat)
         x_flat = x_flat + dt * dx
+        # Clamp state to the conditional manifold after each step
+        x = x_flat.view(B, M, 1)
+        x = x * (1.0 - condition_mask) + condition_values * condition_mask
+        x_flat = x.view(B * M, 1)
 
     return x_flat.view(B, M, 1)

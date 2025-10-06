@@ -12,6 +12,33 @@ class ValueEmbed(nn.Module):
         return self.linear(x)
 
 
+class ErrorEmbed(nn.Module):
+    """
+    Embed measurement errors using Fourier features for robust scale handling.
+    """
+
+    def __init__(self, embed_dim, fourier_dim=128, scale=1.0):
+        super().__init__()
+        self.embed_dim = embed_dim
+        # Random Fourier features (fixed, not learned)
+        self.register_buffer('B', torch.randn(fourier_dim // 2) * scale * 2 * torch.pi)
+        # Project Fourier features to desired embedding dimension
+        self.projection = nn.Linear(fourier_dim, embed_dim)
+
+    def forward(self, errors):
+        # errors: (B, N, 1)
+        # Squeeze to (B, N) for Fourier projection
+        e = errors.squeeze(-1)  # (B, N)
+        # Fourier features
+        e_proj = e.unsqueeze(-1) * self.B  # (B, N, fourier_dim//2)
+        e_fourier = torch.cat([torch.sin(e_proj), torch.cos(e_proj)], dim=-1)  # (B, N, fourier_dim)
+        # Project to embedding dimension
+        e_embed = self.projection(e_fourier)  # (B, N, embed_dim)
+        # Handle NaN errors (missing measurements)
+        e_embed = torch.nan_to_num(e_embed, nan=0.0)
+        return e_embed
+
+
 class ConditionEmbed(nn.Module):
     """
     If this variable is conditioned on, use this global learned vector. Otherwise, use nothing (i.e. zero vector).
@@ -48,20 +75,50 @@ class TimeEmbed(nn.Module):
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)  # (B, time_embed_dim)
 
 class Tokenizer(nn.Module):
-    def __init__(self, dim_value, dim_id, dim_condition, attn_embed_dim, num_nodes):
+    def __init__(
+            self,
+            dim_value,
+            dim_id,
+            dim_condition,
+            attn_embed_dim,
+            num_nodes,
+            dim_error=None,  # NEW: dimension for error embedding
+            use_error_embedding=True  # NEW: whether to use error embeddings
+    ):
         super().__init__()
+        self.use_error_embedding = use_error_embedding
+
         self.value_embed = ValueEmbed(dim_value)
         self.id_embed = NodeIDEmbed(num_nodes, dim_id)
         self.cond_embed = ConditionEmbed(dim_condition)
-        # Linear projection to the attention embedding dimension (not part of the original code)
-        self.output_proj = nn.Linear(dim_value + dim_id + dim_condition, attn_embed_dim)
+        # NEW: Error embedding
+        if use_error_embedding and (dim_error is not None):
+            self.error_embed = ErrorEmbed(dim_error, fourier_dim=128, scale=1.0)
+            total_dim = dim_value + dim_id + dim_condition + dim_error
+        else:
+            total_dim = dim_value + dim_id + dim_condition
 
-    def forward(self, x, node_ids, condition_mask):
-        val_emb = self.value_embed(x)
-        id_emb = self.id_embed(node_ids)
-        cond_emb = self.cond_embed(condition_mask)
-        token = torch.cat([val_emb, id_emb, cond_emb], dim=-1)
-        return self.output_proj(token)
+        # Linear projection to the attention embedding dimension
+        self.output_proj = nn.Linear(total_dim, attn_embed_dim)
+
+    def forward(self, x, node_ids, condition_mask, errors=None):
+        val_emb = self.value_embed(x)  # (B, N, dim_value)
+        id_emb = self.id_embed(node_ids)  # (B, N, dim_id)
+        cond_emb = self.cond_embed(condition_mask)  # (B, N, dim_condition)
+        # Concatenate embeddings
+        embeddings = [val_emb, id_emb, cond_emb]
+        # NEW: Error embedding (if provided and enabled)
+        if self.use_error_embedding and (errors is not None):
+            # Ensure errors have shape (B, N, 1)
+            if errors.dim() == 2:
+                errors = errors.unsqueeze(-1)
+            err_emb = self.error_embed(errors)  # (B, N, dim_error)
+            embeddings.append(err_emb)
+
+        # Concatenate all embeddings
+        token = torch.cat(embeddings, dim=-1)  # (B, N, total_dim)
+        # Project to attention embedding dimension
+        return self.output_proj(token)  # (B, N, attn_embed_dim)
 
 
 class MaskedMultiheadAttention(nn.Module):
@@ -120,15 +177,27 @@ class Simformer(nn.Module):
                  dim_value,      # Dimension of the value embedding
                  dim_id,         # Dimension of the node ID embedding
                  dim_condition,  # Dimension of the condition embedding
+                 dim_error=None,  # NEW: Dimension of error embedding (optional)
+                 use_error_embedding=True,  # NEW: Whether to use errors
                  # Attention embedding dimension
-                 attn_embed_dim, # Dimension of the attention embedding
-                 num_heads,      # Number of attention heads
-                 num_layers,     # Number of transformer layers
+                 attn_embed_dim=64,  # Dimension of the attention embedding
+                 num_heads=4,        # Number of attention heads
+                 num_layers=3,       # Number of transformer layers
                  widening_factor=4,  # Widening factor for feedforward layers
                  time_embed_dim=32,
                  dropout=0.1):
         super().__init__()
-        self.tokenizer = Tokenizer(dim_value, dim_id, dim_condition, attn_embed_dim, num_nodes)
+        self.use_error_embedding = use_error_embedding
+
+        self.tokenizer = Tokenizer(
+            dim_value,
+            dim_id,
+            dim_condition,
+            attn_embed_dim,
+            num_nodes,
+            dim_error=dim_error,
+            use_error_embedding=use_error_embedding
+        )
         self.time_embed = TimeEmbed(time_embed_dim)
         self.time_proj = nn.Linear(time_embed_dim, attn_embed_dim)
         self.transformer_blocks = nn.ModuleList([
@@ -137,12 +206,21 @@ class Simformer(nn.Module):
         ])
         self.output_layer = nn.Linear(attn_embed_dim, 1)
 
-    def forward(self, t, x, node_ids, condition_mask, edge_mask):
-        tokens = self.tokenizer(x, node_ids, condition_mask)
+    def forward(self, t, x, node_ids, condition_mask, edge_mask, errors=None):
+        tokens = self.tokenizer(x, node_ids, condition_mask, errors=errors)
         t_context = self.time_embed(t)  # shape: (B, time_embed_dim)
         t_context = self.time_proj(t_context)  # shape: (B, attn_embed_dim)
 
         for block in self.transformer_blocks:
             # reshape for MultiheadAttention: (M, B, embed_dim)
             tokens = block(tokens, edge_mask, context=t_context)
-        return self.output_layer(tokens)
+        # return self.output_layer(tokens)
+        # Predict velocity
+        v = self.output_layer(tokens)  # (B, M, 1)
+        # Zero velocity on conditioned coords
+        if condition_mask is not None:
+            v = v * (1.0 - condition_mask)  # broadcast-safe
+        return v
+
+
+
