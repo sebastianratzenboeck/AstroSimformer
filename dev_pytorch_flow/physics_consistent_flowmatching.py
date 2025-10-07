@@ -29,6 +29,7 @@ class PhysicsConsistentFlowMatchingTrainer(FlowMatchingTrainer):
         val_every_n_epochs=1,
         unrolling_steps=1,
         residual_weight_power=1.0,
+        physics_loss_weight=1.0,
         use_conflict_free=True,
         use_wandb=True,
         wandb_project="flow-matching-physics",
@@ -58,6 +59,7 @@ class PhysicsConsistentFlowMatchingTrainer(FlowMatchingTrainer):
         self.physics_feature_indices = physics_feature_indices
         self.unrolling_steps = unrolling_steps
         self.residual_weight_power = residual_weight_power
+        self.physics_loss_weight = physics_loss_weight
         self.use_conflict_free = use_conflict_free
 
         # Initialize conflict-free optimizer if needed
@@ -167,8 +169,8 @@ class PhysicsConsistentFlowMatchingTrainer(FlowMatchingTrainer):
             # Fallback for residual functions that don't accept errors
             residual = self.physics_residual_fn(x_physics)
 
-        # Weight by t^p (emphasize later times when predictions are more accurate)
-        weight = t_scalar ** self.residual_weight_power
+        # Weight by t^p (emphasize later times when predictions are more accurate) x physics_loss_weight
+        weight = t_scalar ** self.residual_weight_power * self.physics_loss_weight
 
         # Return scalar loss (already computed in residual_fn for photometry)
         if residual.dim() == 0:  # scalar
