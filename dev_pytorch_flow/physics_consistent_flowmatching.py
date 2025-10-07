@@ -1,11 +1,13 @@
 import torch
 import torch.optim as optim
+import wandb
 from typing import Callable, Optional, List, Dict
+from simflower import FlowMatchingTrainer
 from conflict_free_grad import ConFIGOptimizer
 
 C_pc2cm = 3.085677581491367e+18
 
-class PhysicsConsistentFlowMatchingTrainer:
+class PhysicsConsistentFlowMatchingTrainer(FlowMatchingTrainer):
     """
     Enhanced version of FlowMatchingTrainer that incorporates physics constraints
     using conflict-free gradient updates.
@@ -14,98 +16,66 @@ class PhysicsConsistentFlowMatchingTrainer:
         self,
         model,
         data,
-        data_errors=None,  # NEW: errors tensor with same shape as data
-        # New
+        data_errors=None,
         physics_residual_fn: Optional[Callable] = None,
         physics_feature_indices: Optional[List[int]] = None,
-        # ---
         batch_size=128,
         lr=1e-3,
         sigma_min=0.001,
         time_prior_exponent=1.0,
         inner_train_loop_size=1000,
         early_stopping_patience=20,
-        # New
-        unrolling_steps=1,          # Number of unrolling steps for better x1 prediction
-        residual_weight_power=1.0,  # Power for time-based residual weighting
-        use_conflict_free=True,     # Whether to use conflict-free gradients
-        # ---
+        val_split=0.15,
+        val_every_n_epochs=1,
+        unrolling_steps=1,
+        residual_weight_power=1.0,
+        use_conflict_free=True,
+        use_wandb=True,
+        wandb_project="flow-matching-physics",
+        wandb_config=None,
         device="cuda" if torch.cuda.is_available() else "cpu"
     ):
-        self.model = model.to(device)
-        self.data = torch.tensor(data, dtype=torch.float32).to(device)
+        super().__init__(
+            model=model,
+            data=data,
+            data_errors=data_errors,
+            batch_size=batch_size,
+            lr=lr,
+            sigma_min=sigma_min,
+            time_prior_exponent=time_prior_exponent,
+            inner_train_loop_size=inner_train_loop_size,
+            early_stopping_patience=early_stopping_patience,
+            val_split=val_split,
+            val_every_n_epochs=val_every_n_epochs,
+            use_wandb=use_wandb,
+            wandb_project=wandb_project,
+            wandb_config=wandb_config,
+            device=device
+        )
 
-        # NEW: Store errors if provided
-        if data_errors is not None:
-            self.data_errors = torch.tensor(data_errors, dtype=torch.float32).to(device)
-        else:
-            # If no errors provided, use ones (no normalization effect)
-            self.data_errors = torch.ones_like(self.data)
-
-        self.batch_size = batch_size
-        self.lr = lr
-        self.sigma_min = sigma_min
-        self.time_prior_exponent = time_prior_exponent
-        self.inner_train_loop_size = inner_train_loop_size
-        self.early_stopping_patience = early_stopping_patience
-        self.device = device
-
-        self.optimizer = optim.Adam(model.parameters(), lr=lr)
-        # New
-        self.config_optimizer = ConFIGOptimizer() if use_conflict_free else None
-        # ---
-        self.best_model_state = None
-
-        self.num_nodes = self.data.shape[1]
-        self.node_ids = torch.arange(self.num_nodes).unsqueeze(0).repeat(self.batch_size, 1).to(device)
-
-        # Physics-specific parameters (new)
+        # Physics-specific parameters
         self.physics_residual_fn = physics_residual_fn
         self.physics_feature_indices = physics_feature_indices
         self.unrolling_steps = unrolling_steps
         self.residual_weight_power = residual_weight_power
         self.use_conflict_free = use_conflict_free
 
-    def sample_batch(self):
-        """Sample batch of data and corresponding errors."""
-        idx = torch.randint(0, self.data.shape[0], (self.batch_size,))
-        return self.data[idx], self.data_errors[idx]
+        # Initialize conflict-free optimizer if needed
+        self.config_optimizer = ConFIGOptimizer() if self.use_conflict_free else None
 
-    def build_condition_mask(self, prob=0.333):
-        mask = torch.bernoulli(torch.full((self.batch_size, self.num_nodes), prob)).bool().to(self.device)
-        all_true = mask.all(dim=1, keepdim=True)
-        mask = mask & ~all_true
-        return mask.unsqueeze(-1).float()
-
-    def build_edge_mask(self, dense_ratio=0.7):
-        n_dense = int(self.batch_size * dense_ratio)
-        dense = torch.ones((n_dense, self.num_nodes, self.num_nodes), dtype=torch.bool)
-        sparse = []
-        for _ in range(self.batch_size - n_dense):
-            m = torch.ones((self.num_nodes, self.num_nodes), dtype=torch.bool)
-            drop = torch.rand(self.num_nodes) < 0.2
-            m[drop] = False
-            m[:, drop] = False
-            m[drop, drop] = True
-            sparse.append(m)
-        if sparse:
-            sparse = torch.stack(sparse, dim=0)
-            masks = torch.cat([dense, sparse], dim=0)
-        else:
-            masks = dense
-        indices = torch.randint(0, masks.shape[0], (self.batch_size,))
-        return masks[indices].to(self.device)
-
-    def sample_t(self, batch_size):
-        t = torch.rand(batch_size, device=self.device)
-        return t.pow(1 / (1 + self.time_prior_exponent))
+        # Add physics config to wandb
+        if self.use_wandb:
+            wandb.config.update({
+                "physics_enabled": physics_residual_fn is not None,
+                "unrolling_steps": unrolling_steps,
+                "residual_weight_power": residual_weight_power,
+                "use_conflict_free": self.use_conflict_free,
+            })
 
     # New
     def predict_x1_with_unrolling(self, xt, t, node_ids, condition_mask, edge_mask, x_errors, x_fixed):
         """
         Predict final state x1 using unrolling for better accuracy.
-
-        NOW INCLUDES ERRORS as input to the model.
 
         Args:
             xt: Current interpolated state
@@ -113,17 +83,18 @@ class PhysicsConsistentFlowMatchingTrainer:
             node_ids: Node IDs
             condition_mask: Condition mask
             edge_mask: Edge mask
-            x_errors: Measurement errors [B, num_nodes]
+            x_errors: Measurement errors [B, num_nodes, 1]
+            x_fixed: Fixed values for conditioned variables [B, num_nodes]
 
         Returns:
-            Predicted x1 state
+            Predicted x1 state [B, num_nodes]
         """
         batch_size = xt.shape[0]
-        t_scalar = t[0, 0, 0].item()  # Get scalar time value
+        t_scalar = t[0, 0, 0].item()
 
         if self.unrolling_steps == 1:
             # Single step prediction using the velocity field
-            v = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors)  # ADDED x_errors
+            v = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors)
             v = v * (1.0 - condition_mask)  # project velocity
             # We integrate from t to 1 to get x1
             x1_pred = xt + (1 - t_scalar) * v
@@ -163,26 +134,6 @@ class PhysicsConsistentFlowMatchingTrainer:
 
         return x_current.squeeze(-1)
 
-    def flow_matching_loss(self, x0, x1, t, xt, node_ids, condition_mask, edge_mask, x_errors):
-        """Compute standard flow matching loss. NOW INCLUDES ERRORS."""
-        pred_velocity = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors)  # (B,M,1)
-        # Target FM velocity (same shape after unsqueeze)
-        velocity = (x1 - (1 - self.sigma_min) * x0).unsqueeze(-1)
-        # project both to the free subspace
-        free = (1.0 - condition_mask)
-        pred_velocity = pred_velocity * free
-        diff = (pred_velocity - velocity).squeeze(-1) ** 2
-
-        # diff = (pred_velocity.squeeze(-1) - velocity) ** 2
-        # diff = torch.where(loss_mask.squeeze(-1), 0.0, diff)
-
-        loss_mask = condition_mask.bool()
-        num_elements = torch.sum(~loss_mask, axis=-2, keepdim=True)
-        diff = torch.where(num_elements > 0, diff / num_elements, 0.0)
-        # Mean over batch
-        loss = torch.mean(diff)
-        return loss
-
     def physics_residual_loss(self, x1_pred, t_scalar, x_errors=None):
         """
         Compute physics residual loss for predicted final state.
@@ -219,10 +170,11 @@ class PhysicsConsistentFlowMatchingTrainer:
         # Weight by t^p (emphasize later times when predictions are more accurate)
         weight = t_scalar ** self.residual_weight_power
 
-        # Compute MSE of residual
-        loss = weight * torch.mean(residual ** 2)
-
-        return loss
+        # Return scalar loss (already computed in residual_fn for photometry)
+        if residual.dim() == 0:  # scalar
+            return weight * residual
+        else:
+            return weight * torch.mean(residual ** 2)
 
     def training_step(self, x0, x1, node_ids, condition_mask, edge_mask, x_errors):
         """
@@ -239,13 +191,11 @@ class PhysicsConsistentFlowMatchingTrainer:
 
         if (self.physics_residual_fn is not None) and self.use_conflict_free:
             # Compute losses separately for conflict-free updates
-
-            # Flow matching loss
-            loss_fm = self.flow_matching_loss(x0, x1, t, xt, node_ids, condition_mask, edge_mask, x_errors)
+            loss_fm = self.flow_matching_loss(x0, x1, node_ids, condition_mask, edge_mask, x_errors)
 
             # Physics residual loss with unrolling
             x1_pred = self.predict_x1_with_unrolling(xt, t, node_ids, condition_mask, edge_mask, x_errors, x1)
-            loss_physics = self.physics_residual_loss(x1_pred, t_scalar)
+            loss_physics = self.physics_residual_loss(x1_pred, t_scalar, x_errors)
 
             # Compute gradients separately
             self.optimizer.zero_grad()
@@ -285,11 +235,11 @@ class PhysicsConsistentFlowMatchingTrainer:
 
         else:
             # Standard training (weighted sum of losses)
-            loss_fm = self.flow_matching_loss(x0, x1, t, xt, node_ids, condition_mask, edge_mask, x_errors)
+            loss_fm = self.flow_matching_loss(x0, x1, node_ids, condition_mask, edge_mask, x_errors)
 
             if self.physics_residual_fn is not None:
-                x1_pred = self.predict_x1_with_unrolling(xt, t, node_ids, condition_mask, edge_mask, x_errors)
-                loss_physics = self.physics_residual_loss(x1_pred, t_scalar)
+                x1_pred = self.predict_x1_with_unrolling(xt, t, node_ids, condition_mask, edge_mask, x_errors, x1)
+                loss_physics = self.physics_residual_loss(x1_pred, t_scalar, x_errors)
                 total_loss = loss_fm + loss_physics
             else:
                 loss_physics = torch.tensor(0.0, device=self.device)
@@ -301,51 +251,140 @@ class PhysicsConsistentFlowMatchingTrainer:
         self.optimizer.step()
 
         return {
+            'loss': total_loss.item(),
             'loss_fm': loss_fm.item(),
-            'loss_physics': loss_physics.item(),
-            'loss_total': total_loss.item()
+            'loss_physics': loss_physics.item()
         }
+
+    @torch.no_grad()
+    def validate(self, num_batches=50):
+        """Compute validation loss with physics constraints."""
+        if self.val_data is None:
+            return None, None, None
+
+        self.model.eval()
+        total_val_loss = 0.0
+        total_fm_loss = 0.0
+        total_physics_loss = 0.0
+
+        for _ in range(num_batches):
+            x1, x_errors = self.sample_batch(from_val=True)
+            x0 = torch.randn_like(x1)
+            condition_mask = self.build_condition_mask()
+            edge_mask = self.build_edge_mask(dense_ratio=0.6)
+
+            # Flow matching loss
+            loss_fm = self.flow_matching_loss(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)
+            total_fm_loss += loss_fm.item()
+
+            # Physics loss if enabled
+            if self.physics_residual_fn is not None:
+                B, N = x0.shape
+                t = self.sample_t(B).reshape(B, 1, 1)
+                t_scalar = t[0, 0, 0].item()
+                xt = (1 - (1 - self.sigma_min) * t) * x0.unsqueeze(-1) + t * x1.unsqueeze(-1)
+                xt = torch.where(condition_mask.bool(), x1.unsqueeze(-1), xt)
+
+                x1_pred = self.predict_x1_with_unrolling(xt, t, self.node_ids, condition_mask, edge_mask, x_errors, x1)
+                loss_physics = self.physics_residual_loss(x1_pred, t_scalar, x_errors)
+                total_physics_loss += loss_physics.item()
+                total_val_loss += loss_fm.item() + loss_physics.item()
+            else:
+                total_val_loss += loss_fm.item()
+
+        self.model.train()
+
+        avg_total = total_val_loss / num_batches
+        avg_fm = total_fm_loss / num_batches
+        avg_physics = total_physics_loss / num_batches if self.physics_residual_fn is not None else 0.0
+
+        return avg_total, avg_fm, avg_physics
 
     def fit(self, epochs=100, verbose=True):
         """Train the model with physics constraints."""
         best_loss = float("inf")
         no_improve = 0
+        global_step = 0
 
         for epoch in range(epochs):
-            metrics = {'loss_fm': 0.0, 'loss_physics': 0.0, 'loss_total': 0.0}
+            self.model.train()
+            metrics = {'loss': 0.0, 'loss_fm': 0.0, 'loss_physics': 0.0}
 
-            for _ in range(self.inner_train_loop_size):
-                x1, x_errors = self.sample_batch()  # NOW RETURNS ERRORS TOO
+            for step in range(self.inner_train_loop_size):
+                x1, x_errors = self.sample_batch(from_val=False)
                 x0 = torch.randn_like(x1)
 
                 condition_mask = self.build_condition_mask()
                 edge_mask = self.build_edge_mask(dense_ratio=0.6)
 
-                step_metrics = self.training_step(
-                    x0, x1, self.node_ids, condition_mask, edge_mask, x_errors  # PASS ERRORS
-                )
+                step_metrics = self.training_step(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)
 
                 for key in metrics:
                     metrics[key] += step_metrics[key] / self.inner_train_loop_size
 
-            if verbose:
-                print(f"Epoch {epoch + 1}: FM Loss = {metrics['loss_fm']:.6f}, "
-                      f"Physics Loss = {metrics['loss_physics']:.6f}, "
-                      f"Total = {metrics['loss_total']:.6f}")
+                global_step += 1
 
-            if metrics['loss_total'] < best_loss:
-                best_loss = metrics['loss_total']
+                # Log to wandb every N steps
+                if self.use_wandb and step % 100 == 0:
+                    wandb.log({
+                        "train_loss_step": step_metrics['loss'],
+                        "train_loss_fm_step": step_metrics['loss_fm'],
+                        "train_loss_physics_step": step_metrics['loss_physics'],
+                        "epoch": epoch + 1,
+                        "step": global_step
+                    })
+
+            # Validate periodically
+            val_loss, val_fm, val_physics = None, None, None
+            if epoch % self.val_every_n_epochs == 0:
+                val_loss, val_fm, val_physics = self.validate()
+
+            # Logging
+            if verbose:
+                log_str = f"Epoch {epoch + 1}: FM Loss = {metrics['loss_fm']:.6f}, Physics Loss = {metrics['loss_physics']:.6f}, Total = {metrics['loss']:.6f}"
+                if val_loss is not None:
+                    log_str += f"\n              Val: FM = {val_fm:.6f}, Physics = {val_physics:.6f}, Total = {val_loss:.6f}"
+                print(log_str)
+
+            if self.use_wandb:
+                log_dict = {
+                    "train_loss_epoch": metrics['loss'],
+                    "train_loss_fm_epoch": metrics['loss_fm'],
+                    "train_loss_physics_epoch": metrics['loss_physics'],
+                    "epoch": epoch + 1
+                }
+                if val_loss is not None:
+                    log_dict.update({
+                        "val_loss": val_loss,
+                        "val_loss_fm": val_fm,
+                        "val_loss_physics": val_physics
+                    })
+                wandb.log(log_dict)
+
+            # Early stopping based on validation loss (if available) or training loss
+            monitor_loss = val_loss if val_loss is not None else metrics['loss']
+
+            if monitor_loss < best_loss:
+                best_loss = monitor_loss
                 no_improve = 0
                 self.best_model_state = self.model.state_dict()
+                if self.use_wandb:
+                    wandb.run.summary["best_loss"] = best_loss
+                    wandb.run.summary["best_epoch"] = epoch + 1
             else:
                 no_improve += 1
 
             if no_improve >= self.early_stopping_patience:
                 if verbose:
-                    print("Early stopping triggered.")
+                    print(f"Early stopping triggered at epoch {epoch + 1}.")
                 break
 
+        # Load best model
         self.model.load_state_dict(self.best_model_state)
+
+        if self.use_wandb:
+            wandb.finish()
+
         return self.model
 
 

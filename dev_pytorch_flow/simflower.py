@@ -1,46 +1,108 @@
 import torch
 import torch.optim as optim
+import wandb
+from sklearn.model_selection import train_test_split
+
 
 class FlowMatchingTrainer:
     def __init__(
-        self,
-        model,
-        data,
-        batch_size=128,
-        lr=1e-3,
-        sigma_min=0.001,
-        time_prior_exponent=1.0,
-        inner_train_loop_size=1000,
-        early_stopping_patience=20,
-        device="cuda" if torch.cuda.is_available() else "cpu"
+            self,
+            model,
+            data,
+            data_errors=None,
+            batch_size=128,
+            lr=1e-3,
+            sigma_min=0.001,
+            time_prior_exponent=1.0,
+            inner_train_loop_size=1000,
+            early_stopping_patience=20,
+            val_split=0.15,
+            val_every_n_epochs=1,
+            use_wandb=True,
+            wandb_project="flow-matching",
+            wandb_config=None,
+            device="cuda" if torch.cuda.is_available() else "cpu"
     ):
         self.model = model.to(device)
-        self.data = torch.tensor(data, dtype=torch.float32).to(device)
         self.batch_size = batch_size
         self.lr = lr
         self.sigma_min = sigma_min
         self.time_prior_exponent = time_prior_exponent
         self.inner_train_loop_size = inner_train_loop_size
         self.early_stopping_patience = early_stopping_patience
+        self.val_every_n_epochs = val_every_n_epochs
+        self.use_wandb = use_wandb
         self.device = device
+
+        # Split data into train and validation
+        if val_split > 0:
+            if data_errors is not None:
+                train_data, val_data, train_errors, val_errors = train_test_split(
+                    data, data_errors, test_size=val_split, random_state=42
+                )
+                self.train_errors = torch.tensor(train_errors, dtype=torch.float32).to(device)
+                self.val_errors = torch.tensor(val_errors, dtype=torch.float32).to(device)
+            else:
+                train_data, val_data = train_test_split(
+                    data, test_size=val_split, random_state=42
+                )
+                self.train_errors = None
+                self.val_errors = None
+
+            self.train_data = torch.tensor(train_data, dtype=torch.float32).to(device)
+            self.val_data = torch.tensor(val_data, dtype=torch.float32).to(device)
+        else:
+            self.train_data = torch.tensor(data, dtype=torch.float32).to(device)
+            self.val_data = None
+            if data_errors is not None:
+                self.train_errors = torch.tensor(data_errors, dtype=torch.float32).to(device)
+                self.val_errors = None
+            else:
+                self.train_errors = None
+                self.val_errors = None
 
         self.optimizer = optim.Adam(model.parameters(), lr=lr)
         self.best_model_state = None
 
-        self.num_nodes = self.data.shape[1]
+        self.num_nodes = self.train_data.shape[1]
         self.node_ids = torch.arange(self.num_nodes).unsqueeze(0).repeat(self.batch_size, 1).to(device)
 
-    def sample_batch(self):
-        idx = torch.randint(0, self.data.shape[0], (self.batch_size,))
-        return self.data[idx]
+        # Initialize wandb
+        if self.use_wandb:
+            config = wandb_config or {}
+            config.update({
+                "batch_size": batch_size,
+                "lr": lr,
+                "sigma_min": sigma_min,
+                "time_prior_exponent": time_prior_exponent,
+                "inner_train_loop_size": inner_train_loop_size,
+                "num_nodes": self.num_nodes,
+                "train_samples": len(self.train_data),
+                "val_samples": len(self.val_data) if self.val_data is not None else 0,
+                "has_errors": self.train_errors is not None,
+            })
+            wandb.init(project=wandb_project, config=config)
+            wandb.watch(self.model, log="all", log_freq=100)
+
+    def sample_batch(self, from_val=False):
+        """Sample batch of data and corresponding errors."""
+        if from_val:
+            data = self.val_data
+            errors = self.val_errors
+        else:
+            data = self.train_data
+            errors = self.train_errors
+
+        idx = torch.randint(0, data.shape[0], (self.batch_size,))
+        batch_data = data[idx]
+        batch_errors = errors[idx] if errors is not None else None
+        return batch_data, batch_errors
 
     def build_condition_mask(self, prob=0.333):
         mask = torch.bernoulli(torch.full((self.batch_size, self.num_nodes), prob)).bool().to(self.device)
         all_true = mask.all(dim=1, keepdim=True)
-        mask = mask & ~all_true  # prevent all-true
+        mask = mask & ~all_true
         return mask.unsqueeze(-1).float()
-        # Just for testing, return a zero mask
-        # return torch.zeros((self.batch_size, self.num_nodes, 1), dtype=torch.float32).to(self.device)
 
     def build_edge_mask(self, dense_ratio=0.7):
         n_dense = int(self.batch_size * dense_ratio)
@@ -51,7 +113,7 @@ class FlowMatchingTrainer:
             drop = torch.rand(self.num_nodes) < 0.2
             m[drop] = False
             m[:, drop] = False
-            m[drop, drop] = True  # ensure diagonal is True
+            m[drop, drop] = True
             sparse.append(m)
         if sparse:
             sparse = torch.stack(sparse, dim=0)
@@ -65,14 +127,15 @@ class FlowMatchingTrainer:
         t = torch.rand(batch_size, device=self.device)
         return t.pow(1 / (1 + self.time_prior_exponent))
 
-    def flow_matching_loss(self, x0, x1, node_ids, condition_mask, edge_mask):
+    def flow_matching_loss(self, x0, x1, node_ids, condition_mask, edge_mask, x_errors=None):
+        """Compute standard flow matching loss."""
         B, N = x0.shape
-        t = self.sample_t(B).reshape(B, 1, 1)  #, x1.unsqueeze(-1).shape)
+        t = self.sample_t(B).reshape(B, 1, 1)
 
         xt = (1 - (1 - self.sigma_min) * t) * x0.unsqueeze(-1) + t * x1.unsqueeze(-1)
         xt = torch.where(condition_mask.bool(), x1.unsqueeze(-1), xt)
 
-        pred_velocity = self.model(t, xt, node_ids, condition_mask, edge_mask)
+        pred_velocity = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors)
         velocity = x1 - (1 - self.sigma_min) * x0
 
         loss_mask = condition_mask.bool()
@@ -81,47 +144,117 @@ class FlowMatchingTrainer:
 
         num_elements = torch.sum(~loss_mask, axis=-2, keepdim=True)
         diff = torch.where(num_elements > 0, diff / num_elements, 0.0)
-        # Mean over batch
         loss = torch.mean(diff)
         return loss
 
-    def fit(self, epochs=100):
+    def training_step(self, x0, x1, node_ids, condition_mask, edge_mask, x_errors):
+        """Perform one training step."""
+        loss = self.flow_matching_loss(x0, x1, node_ids, condition_mask, edge_mask, x_errors)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return {'loss': loss.item()}
+
+    @torch.no_grad()
+    def validate(self, num_batches=50):
+        """Compute validation loss over multiple batches."""
+        if self.val_data is None:
+            return None
+
+        self.model.eval()
+        total_val_loss = 0.0
+
+        for _ in range(num_batches):
+            x1, x_errors = self.sample_batch(from_val=True)
+            x0 = torch.randn_like(x1)
+            condition_mask = self.build_condition_mask()
+            edge_mask = self.build_edge_mask(dense_ratio=0.6)
+
+            loss = self.flow_matching_loss(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)
+            total_val_loss += loss.item()
+
+        self.model.train()
+        return total_val_loss / num_batches
+
+    def fit(self, epochs=100, verbose=True):
+        """Train the model."""
         best_loss = float("inf")
         no_improve = 0
+        global_step = 0
 
         for epoch in range(epochs):
+            self.model.train()
             total_loss = 0.0
-            for _ in range(self.inner_train_loop_size):
-                x1 = self.sample_batch()
+
+            for step in range(self.inner_train_loop_size):
+                x1, x_errors = self.sample_batch(from_val=False)
                 x0 = torch.randn_like(x1)
-                loss_mask = torch.isnan(x1)
-                # x1_clean = torch.nan_to_num(x1, nan=0.0)
 
                 condition_mask = self.build_condition_mask()
                 edge_mask = self.build_edge_mask(dense_ratio=0.6)
 
-                loss = self.flow_matching_loss(x0, x1, self.node_ids, condition_mask, edge_mask)
+                step_metrics = self.training_step(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                total_loss += step_metrics['loss']
+                global_step += 1
 
-                total_loss += loss.item() / self.inner_train_loop_size
+                # Log to wandb every N steps
+                if self.use_wandb and step % 100 == 0:
+                    wandb.log({
+                        "train_loss_step": step_metrics['loss'],
+                        "epoch": epoch + 1,
+                        "step": global_step
+                    })
 
-            print(f"Epoch {epoch + 1}: loss = {total_loss:.6f}")
+            avg_train_loss = total_loss / self.inner_train_loop_size
 
-            if total_loss < best_loss:
-                best_loss = total_loss
+            # Validate periodically
+            val_loss = None
+            if epoch % self.val_every_n_epochs == 0:
+                val_loss = self.validate()
+
+            # Logging
+            if verbose:
+                log_str = f"Epoch {epoch + 1}: train_loss = {avg_train_loss:.6f}"
+                if val_loss is not None:
+                    log_str += f", val_loss = {val_loss:.6f}"
+                print(log_str)
+
+            if self.use_wandb:
+                log_dict = {
+                    "train_loss_epoch": avg_train_loss,
+                    "epoch": epoch + 1
+                }
+                if val_loss is not None:
+                    log_dict["val_loss"] = val_loss
+                wandb.log(log_dict)
+
+            # Early stopping based on validation loss (if available) or training loss
+            monitor_loss = val_loss if val_loss is not None else avg_train_loss
+
+            if monitor_loss < best_loss:
+                best_loss = monitor_loss
                 no_improve = 0
                 self.best_model_state = self.model.state_dict()
+                if self.use_wandb:
+                    wandb.run.summary["best_loss"] = best_loss
+                    wandb.run.summary["best_epoch"] = epoch + 1
             else:
                 no_improve += 1
 
             if no_improve >= self.early_stopping_patience:
-                print("Early stopping triggered.")
+                if verbose:
+                    print(f"Early stopping triggered at epoch {epoch + 1}.")
                 break
 
+        # Load best model
         self.model.load_state_dict(self.best_model_state)
+
+        if self.use_wandb:
+            wandb.finish()
+
         return self.model
 
 
