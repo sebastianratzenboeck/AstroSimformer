@@ -30,3 +30,6 @@ build/
 /dev_pytorch_post_flow/wandb/
 /dev_pytorch_post_flow/sbi-logs/
 /dev_pytorch_post_flow/run_jobs/
+
+dev_pytorch_flow/*.pt
+dev_pytorch_flow/wandb/
