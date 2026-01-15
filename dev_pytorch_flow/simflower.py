@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import wandb
 from sklearn.model_selection import train_test_split
+from utils import make_condition_mask_generator
 
 
 class FlowMatchingTrainer:
@@ -10,6 +11,7 @@ class FlowMatchingTrainer:
             model,
             data,
             data_errors=None,
+            condition_mask_generator=None,
             batch_size=128,
             lr=1e-3,
             sigma_min=0.001,
@@ -24,6 +26,7 @@ class FlowMatchingTrainer:
             device="cuda" if torch.cuda.is_available() else "cpu"
     ):
         self.model = model.to(device)
+        self.condition_mask_generator = condition_mask_generator
         self.batch_size = batch_size
         self.lr = lr
         self.sigma_min = sigma_min
@@ -98,12 +101,6 @@ class FlowMatchingTrainer:
         batch_errors = errors[idx] if errors is not None else None
         return batch_data, batch_errors
 
-    def build_condition_mask(self, prob=0.333):
-        mask = torch.bernoulli(torch.full((self.batch_size, self.num_nodes), prob)).bool().to(self.device)
-        all_true = mask.all(dim=1, keepdim=True)
-        mask = mask & ~all_true
-        return mask.unsqueeze(-1).float()
-
     def build_edge_mask(self, dense_ratio=0.7):
         n_dense = int(self.batch_size * dense_ratio)
         dense = torch.ones((n_dense, self.num_nodes, self.num_nodes), dtype=torch.bool)
@@ -131,20 +128,29 @@ class FlowMatchingTrainer:
         """Compute standard flow matching loss."""
         B, N = x0.shape
         t = self.sample_t(B).reshape(B, 1, 1)
+        k = (1.0 - self.sigma_min)
 
-        xt = (1 - (1 - self.sigma_min) * t) * x0.unsqueeze(-1) + t * x1.unsqueeze(-1)
-        xt = torch.where(condition_mask.bool(), x1.unsqueeze(-1), xt)
+        # Geodesic mix + clamp to conditioned values (no grad into x1 on those dims)
+        xt = (1 - k * t) * x0.unsqueeze(-1) + t * x1.unsqueeze(-1)
+        # xt = torch.where(condition_mask.bool(), x1.unsqueeze(-1), xt)
+        # clamp xt to conditioned values, no grad through x1 on those dims
+        cond = condition_mask.to(x0.dtype).unsqueeze(-1)  # [B,D,1]
+        free = 1.0 - cond
+        xt = xt * free + x1.unsqueeze(-1).detach() * cond
 
-        pred_velocity = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors)
-        velocity = x1 - (1 - self.sigma_min) * x0
+        # predict velocity
+        v_pred = self.model(t, xt, node_ids, condition_mask, edge_mask, x_errors).squeeze(-1)  # [B,D]
+        v_tgt = (x1 - k * x0)  # [B,D]
 
-        loss_mask = condition_mask.bool()
-        diff = (pred_velocity.squeeze(-1) - velocity) ** 2
-        diff = torch.where(loss_mask.squeeze(-1), 0.0, diff)
+        # Project BOTH velocities to the free subspace (stronger than masking the loss)
+        free_s = free.squeeze(-1)  # [B,D]
+        v_pred = v_pred * free_s
+        v_tgt = v_tgt * free_s
 
-        num_elements = torch.sum(~loss_mask, axis=-2, keepdim=True)
-        diff = torch.where(num_elements > 0, diff / num_elements, 0.0)
-        loss = torch.mean(diff)
+        # MSE over free dims, normalized per sample by #free dims
+        diff = (v_pred - v_tgt).pow(2)  # [B,D]
+        counts = free_s.sum(-1).clamp_min(1.0)  # [B]
+        loss = (diff.sum(-1) / counts).mean()  # scalar
         return loss
 
     def training_step(self, x0, x1, node_ids, condition_mask, edge_mask, x_errors):
@@ -169,7 +175,8 @@ class FlowMatchingTrainer:
         for _ in range(num_batches):
             x1, x_errors = self.sample_batch(from_val=True)
             x0 = torch.randn_like(x1)
-            condition_mask = self.build_condition_mask()
+            # condition_mask = self.build_condition_mask()
+            condition_mask = next(self.condition_mask_generator)
             edge_mask = self.build_edge_mask(dense_ratio=0.6)
 
             loss = self.flow_matching_loss(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)
@@ -192,7 +199,8 @@ class FlowMatchingTrainer:
                 x1, x_errors = self.sample_batch(from_val=False)
                 x0 = torch.randn_like(x1)
 
-                condition_mask = self.build_condition_mask()
+                # condition_mask = self.build_condition_mask()
+                condition_mask = next(self.condition_mask_generator)
                 edge_mask = self.build_edge_mask(dense_ratio=0.6)
 
                 step_metrics = self.training_step(x0, x1, self.node_ids, condition_mask, edge_mask, x_errors)

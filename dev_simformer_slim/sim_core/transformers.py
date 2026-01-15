@@ -19,7 +19,7 @@ class Transformer(hk.Module):
     attn_size: int  # Size of the attention (key, query, value) vectors.
     dropout_rate: float  # Probability with which to apply dropout.
     widening_factor: int = 4  # Factor by which the MLP hidden layer widens.
-    name: str | None = None  # Optional identifier for the module.
+    name: str | None = None  # Optional identifier for the core.
 
     def __init__(
         self,
@@ -157,11 +157,11 @@ class GaussianFourierEmbedding(hk.Module):
         learnable=False,
         name: str = "gaussian_fourier_embedding",
     ):
-        """Gaussian Fourier embedding module. Mostly used to embed time.
+        """Gaussian Fourier embedding core. Mostly used to embed time.
 
         Args:
             output_dim (int, optional): Output dimesion. Defaults to 128.
-            name (str, optional): Name of the module. Defaults to "gaussian_fourier_embedding".
+            name (str, optional): Name of the core. Defaults to "gaussian_fourier_embedding".
         """
         super().__init__(name=name)
         self.output_dim = output_dim

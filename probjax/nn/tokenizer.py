@@ -126,7 +126,7 @@ class ScalarTokenizer(Tokenizer):
             node_meta_data_embeding_builder (Optional[Callable], optional): Should get a function f: (meta_data (abstract), out_dim3 (int)) -> embeding (float32). Defaults to None. Which will use a Gaussian Fourier Embedding for each meta data.
             accummulator (Optional[Union[Callable, str]], optional): Either a string ("concat" or "add") or a function f:(embed_id, embed_val, embeding_meta) -> embedding. Defaults to "concat".
             distributor (Optional[Callable], optional): A function f: out_dim (int) -> (out_dim1, out_dim2, out_dim3). Defaults to None.
-            name (str | None, optional): Name of the module. Defaults to "scalar_tokenizer".
+            name (str | None, optional): Name of the core. Defaults to "scalar_tokenizer".
         """
         self.max_sequence_length = max_sequence_length
         super().__init__(

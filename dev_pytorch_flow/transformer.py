@@ -45,10 +45,13 @@ class ConditionEmbed(nn.Module):
     """
     def __init__(self, dim_condition):
         super().__init__()
-        self.condition_embedding = nn.Parameter(torch.randn(1, 1, dim_condition) * 0.5)
+        self.condition_embedding = nn .Parameter(torch.randn(1, 1, dim_condition) * 0.5)
 
     def forward(self, condition_mask):
         # condition_mask: (B, N, 1)
+        if condition_mask.dim() == 2:
+            condition_mask = condition_mask.unsqueeze(-1)
+        condition_mask = condition_mask.to(self.condition_embedding.dtype)
         cond_emb = self.condition_embedding * condition_mask  # (1, 1, C) * (B, N, 1)
         return cond_emb.expand(condition_mask.size(0), condition_mask.size(1), -1)
 
@@ -207,6 +210,10 @@ class Simformer(nn.Module):
         self.output_layer = nn.Linear(attn_embed_dim, 1)
 
     def forward(self, t, x, node_ids, condition_mask, edge_mask, errors=None):
+        if condition_mask.dim() == 2:
+            condition_mask = condition_mask.unsqueeze(-1)   # (B, N, 1)
+        condition_mask = condition_mask.to(x.dtype)         # dtype match
+
         tokens = self.tokenizer(x, node_ids, condition_mask, errors=errors)
         t_context = self.time_embed(t)  # shape: (B, time_embed_dim)
         t_context = self.time_proj(t_context)  # shape: (B, attn_embed_dim)

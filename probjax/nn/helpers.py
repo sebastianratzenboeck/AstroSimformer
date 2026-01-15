@@ -17,7 +17,7 @@ class Flip(hk.Module):
 
         Args:
             axis (int, optional): Axis to flip. Defaults to -1.
-            name (str, optional): Name of the module. Defaults to "flip".
+            name (str, optional): Name of the core. Defaults to "flip".
         """
         super().__init__(name=name)
         self.axis = axis
@@ -57,7 +57,7 @@ class Rotate(hk.Module):
 
         Args:
             rotation_matrix (Array): Rotation matrix.
-            name (str, optional): Name of the module. Defaults to "rotate".
+            name (str, optional): Name of the core. Defaults to "rotate".
         """
         super().__init__(name=name)
         self.rotation_matrix = jax.random.orthogonal(key, output_dim)
@@ -68,11 +68,11 @@ class Rotate(hk.Module):
 
 class SinusoidalEmbedding(hk.Module):
     def __init__(self, output_dim: int = 128, name: str = "sinusoidal_embedding"):
-        """Sinusoidal embedding module. Mostly used to embed time.
+        """Sinusoidal embedding core. Mostly used to embed time.
 
         Args:
             output_dim (int, optional): Output dimesion. Defaults to 128.
-            name (str, optional): Name of the module. Defaults to "sinusoidal_embedding".
+            name (str, optional): Name of the core. Defaults to "sinusoidal_embedding".
         """
         super().__init__(name=name)
         self.output_dim = output_dim
@@ -94,11 +94,11 @@ class GaussianFourierEmbedding(hk.Module):
         learnable=False,
         name: str = "gaussian_fourier_embedding",
     ):
-        """Gaussian Fourier embedding module. Mostly used to embed time.
+        """Gaussian Fourier embedding core. Mostly used to embed time.
 
         Args:
             output_dim (int, optional): Output dimesion. Defaults to 128.
-            name (str, optional): Name of the module. Defaults to "gaussian_fourier_embedding".
+            name (str, optional): Name of the core. Defaults to "gaussian_fourier_embedding".
         """
         super().__init__(name=name)
         self.output_dim = output_dim
@@ -118,17 +118,17 @@ class GaussianFourierEmbedding(hk.Module):
 
 
 class OneHot(hk.Module):
-    """One hot encoding module."""
+    """One hot encoding core."""
 
     num_tokens: int  # Size of the vocabulary.
-    name: str | None = None  # Optional identifier for the module.
+    name: str | None = None  # Optional identifier for the core.
 
     def __init__(self, num_tokens: int, name: str | None = "one_hot_embed"):
         """_summary_
 
         Args:
             num_tokens (int): Number of distinct tokens.
-            name (str | None, optional): Name of the module. Defaults to "one_hot_embed".
+            name (str | None, optional): Name of the core. Defaults to "one_hot_embed".
         """
         super().__init__(name=name)
         self.num_tokens = num_tokens
@@ -144,7 +144,7 @@ class OneHot(hk.Module):
 
 class PosEmbed(hk.Module):
     def __init__(self, token_dim: int, max_seq_len: int = 500):
-        """Positional embedding module.
+        """Positional embedding core.
 
         Args:
             token_dim (int): Dimension of the token embedding.

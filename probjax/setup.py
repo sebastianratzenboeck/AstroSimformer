@@ -60,7 +60,7 @@ try:
 except FileNotFoundError:
     long_description = DESCRIPTION
 
-# Load the package's __version__.py module as a dictionary.
+# Load the package's __version__.py core as a dictionary.
 # about = {}
 # project_slug = NAME.lower().replace("-", "_").replace(" ", "_")
 # with open(os.path.join(here, project_slug, "__version__.py")) as f:

@@ -146,7 +146,7 @@ class AutoregressiveMLP:
             self.bijector, input_dim, self.output_sizes
         )
         # We have to lift it as it has its own init function
-        # Doing this within here will cause an error, as jax primitives will then be called inside the hk.transform which transforms this module later on.
+        # Doing this within here will cause an error, as jax primitives will then be called inside the hk.transform which transforms this core later on.
         init = hk.lift(init_fn)
 
         # After initialization we can savely call the function

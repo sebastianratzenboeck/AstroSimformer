@@ -20,7 +20,7 @@ class Transformer(hk.Module):
     attn_size: int  # Size of the attention (key, query, value) vectors.
     dropout_rate: float  # Probability with which to apply dropout.
     widening_factor: int = 4  # Factor by which the MLP hidden layer widens.
-    name: str | None = None  # Optional identifier for the module.
+    name: str | None = None  # Optional identifier for the core.
 
     def __init__(
         self,

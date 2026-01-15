@@ -1,7 +1,7 @@
 from typing import Callable, Tuple
 from jaxtyping import PyTree, Array
 from jax._src.flatten_util import ravel_pytree
-# try the old public API, fall back to the internal module
+# try the old public API, fall back to the internal core
 try:
     from jax import linear_util as lu
 except ImportError:
